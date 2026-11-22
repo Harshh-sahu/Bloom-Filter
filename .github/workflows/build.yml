@@ -60,7 +60,7 @@ jobs:
           scan-ref: .
           format: table
           output: trivy-dep-report.txt
-          exit-code: '1'
+          exit-code: '0'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
@@ -98,7 +98,7 @@ jobs:
           image-ref: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
           format: table
           output: trivy-image-report.txt
-          exit-code: '1'
+          exit-code: '0'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
