@@ -1,0 +1,92 @@
+name: Load Test
+
+on:
+  # Run manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      vus:
+        description: 'Number of virtual users'
+        default: '100'
+        required: false
+      duration:
+        description: 'Test duration (e.g. 30s, 2m)'
+        default: '30s'
+        required: false
+
+  # Or run every night at midnight
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  k6-load-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: bloomfilter
+          POSTGRES_USER: bloomfilter
+          POSTGRES_PASSWORD: bloomfilter
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and start the app
+        run: |
+          mvn package -DskipTests -q
+          java -jar target/*.jar &
+          echo "Waiting for app to start..."
+          for i in {1..30}; do
+            curl -sf http://localhost:8080/actuator/health && break
+            sleep 2
+          done
+
+      - name: Seed test data
+        run: |
+          curl -sf -X POST "http://localhost:8080/api/v1/seed/generate?count=50000"
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -qq && sudo apt-get install k6 -y -qq
+
+      - name: Run k6 load test
+        run: |
+          k6 run \
+            --vus ${{ github.event.inputs.vus || '100' }} \
+            --duration ${{ github.event.inputs.duration || '30s' }} \
+            load-test/k6-script.js
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-results
+          path: load-test/results.json

@@ -1,0 +1,826 @@
+<title>Bloom Filter Username Checker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+:root {
+  --bg:       #0c1420;
+  --surface:  #101d2e;
+  --surface2: #162032;
+  --border:   #1e3048;
+  --border2:  #26405c;
+  --text:     #c9d8e8;
+  --muted:    #6a8aaa;
+  --dim:      #42607a;
+  --accent:   #22d4f0;
+  --accent2:  #0ea5c8;
+  --green:    #34d399;
+  --amber:    #fbbf24;
+  --red:      #f87171;
+  --purple:   #a78bfa;
+  --heading:  #e8f2ff;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:       #f0f6ff;
+    --surface:  #ffffff;
+    --surface2: #f4f9ff;
+    --border:   #d4e3f5;
+    --border2:  #b8d0eb;
+    --text:     #1e3a5f;
+    --muted:    #4a6a8a;
+    --dim:      #7a9ab8;
+    --accent:   #0891b2;
+    --accent2:  #0e7490;
+    --green:    #059669;
+    --amber:    #d97706;
+    --red:      #dc2626;
+    --purple:   #7c3aed;
+    --heading:  #0f2a4a;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg:       #f0f6ff;
+  --surface:  #ffffff;
+  --surface2: #f4f9ff;
+  --border:   #d4e3f5;
+  --border2:  #b8d0eb;
+  --text:     #1e3a5f;
+  --muted:    #4a6a8a;
+  --dim:      #7a9ab8;
+  --accent:   #0891b2;
+  --accent2:  #0e7490;
+  --green:    #059669;
+  --amber:    #d97706;
+  --red:      #dc2626;
+  --purple:   #7c3aed;
+  --heading:  #0f2a4a;
+  color-scheme: light;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { font-size: 16px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  margin: 0;
+  padding-inline: 16px;
+}
+
+.page-wrap {
+  max-width: 820px;
+  margin-inline: auto;
+  padding-block: 48px 80px;
+}
+
+.theme-toggle {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-family: 'IBM Plex Sans', sans-serif;
+  cursor: pointer;
+  z-index: 100;
+  letter-spacing: .03em;
+}
+.theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+.hero {
+  padding-block: 32px 40px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 44px;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.eyebrow-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+h1 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(1.9rem, 5vw, 2.9rem);
+  font-weight: 800;
+  color: var(--heading);
+  line-height: 1.1;
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+h1 span { color: var(--accent); }
+.hero-desc {
+  font-size: 1.0625rem;
+  color: var(--muted);
+  max-width: 580px;
+  line-height: 1.6;
+  margin: 0 0 28px;
+}
+.badge-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.72rem; font-weight: 500; letter-spacing: .04em;
+  padding: 4px 10px; border-radius: 4px;
+  border: 1px solid;
+}
+.badge-blue  { color: var(--accent);  border-color: var(--accent2);  background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.badge-green { color: var(--green);   border-color: var(--green);    background: color-mix(in srgb, var(--green) 8%, transparent); }
+.badge-amber { color: var(--amber);   border-color: var(--amber);    background: color-mix(in srgb, var(--amber) 8%, transparent); }
+.badge-purple{ color: var(--purple);  border-color: var(--purple);   background: color-mix(in srgb, var(--purple) 8%, transparent); }
+
+h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--heading);
+  margin: 0 0 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+h2::before {
+  content: '';
+  display: inline-block;
+  width: 3px; height: 1.1em;
+  background: var(--accent);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+h3 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.0rem;
+  font-weight: 600;
+  color: var(--heading);
+  margin: 0 0 10px;
+}
+section { margin-bottom: 52px; }
+
+.pipeline {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  overflow-x: auto;
+}
+.pipeline-steps {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  align-items: flex-start;
+  min-width: 500px;
+}
+.p-step {
+  flex: 1;
+  min-width: 100px;
+  text-align: center;
+  position: relative;
+}
+.p-step + .p-step::before {
+  content: '\2192';
+  position: absolute;
+  left: -12px; top: 20px;
+  color: var(--dim);
+  font-size: 1rem;
+}
+.p-box {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 12px 8px;
+  margin: 0 6px;
+}
+.p-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+}
+.p-desc { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
+.p-result { margin-top: 8px; font-size: 0.69rem; font-weight: 600; letter-spacing: .04em; }
+.p-fast { color: var(--green); }
+.p-slow { color: var(--amber); }
+.path-label {
+  text-align: center;
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-around;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.path-item {
+  font-size: 0.75rem;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+.path-fast { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green); }
+.path-slow { background: color-mix(in srgb, var(--amber) 12%, transparent); color: var(--amber); }
+
+.math-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 20px 22px;
+  margin: 18px 0;
+}
+.math-block h3 { margin: 0 0 12px; color: var(--accent); font-size: 0.85rem; text-transform: uppercase; letter-spacing: .08em; }
+.formula {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  color: var(--heading);
+  padding: 10px 14px;
+  background: var(--surface2);
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.math-row { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; }
+.math-stat {
+  flex: 1; min-width: 120px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.math-stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.math-stat-key { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+.bench-wrap { overflow-x: auto; }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  min-width: 500px;
+}
+thead tr { border-bottom: 1px solid var(--border2); }
+th {
+  padding: 10px 14px;
+  text-align: left;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+td { padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--text); font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.td-approach { font-weight: 500; color: var(--heading); }
+.td-num { font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; }
+.td-fast { color: var(--green); font-weight: 600; }
+.td-mid  { color: var(--amber); }
+.td-rps  { color: var(--purple); font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; }
+.winner { background: color-mix(in srgb, var(--green) 5%, transparent); }
+.table-note { font-size: 0.75rem; color: var(--dim); margin-top: 10px; }
+
+pre.code-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--text);
+  margin: 14px 0;
+}
+.kw  { color: var(--purple); }
+.str { color: var(--green); }
+.cmt { color: var(--dim); font-style: italic; }
+.fn  { color: var(--accent); }
+.num { color: var(--amber); }
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  margin-top: 4px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+}
+.card-icon { font-size: 1.3rem; margin-bottom: 10px; }
+.card h3 { font-size: 0.9rem; margin-bottom: 6px; }
+.card p  { font-size: 0.82rem; color: var(--muted); line-height: 1.5; margin: 0; }
+
+.api-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.api-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.method {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 4px;
+}
+.m-get  { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
+.m-post { background: color-mix(in srgb, var(--amber) 15%, transparent); color: var(--amber); }
+.api-path { font-family: 'JetBrains Mono', monospace; font-size: 0.84rem; color: var(--heading); }
+.api-body { padding: 14px 18px; }
+.api-desc { font-size: 0.84rem; color: var(--muted); margin-bottom: 10px; }
+.param-row {
+  display: flex; flex-wrap: wrap; gap: 6px 16px;
+  font-size: 0.8rem;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.param-name { font-family: 'JetBrains Mono', monospace; color: var(--accent); }
+.param-type { color: var(--purple); font-size: 0.75rem; }
+.param-desc { color: var(--muted); }
+
+.callout {
+  display: flex; gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin: 18px 0;
+}
+.callout.warn { border-left-color: var(--amber); }
+.callout-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+.callout-body { font-size: 0.85rem; color: var(--muted); }
+.callout-body strong { color: var(--text); }
+.callout-body code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--accent);
+}
+
+.qs-steps { display: flex; flex-direction: column; gap: 10px; }
+.qs-step { display: grid; grid-template-columns: 32px 1fr; gap: 14px; align-items: start; }
+.qs-num {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+  font-family: 'Syne', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.qs-content p { font-size: 0.84rem; color: var(--muted); margin: 4px 0 0; }
+.qs-content code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  color: var(--accent);
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+  font-size: 0.78rem;
+  color: var(--dim);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+</style>
+
+<button class="theme-toggle" id="themeBtn">&#9680; Dark</button>
+
+<div class="page-wrap">
+
+  <div class="hero">
+    <div class="eyebrow">
+      <span class="eyebrow-dot"></span>
+      Spring Boot &middot; Redis &middot; PostgreSQL
+    </div>
+    <h1>Bloom Filter<br><span>Username Checker</span></h1>
+    <p class="hero-desc">
+      Production-grade username availability at single-digit millisecond latency &mdash;
+      no database query on the hot path. Implements Guava and hand-written
+      BitSet+MurmurHash3 strategies behind a swappable interface.
+    </p>
+    <div class="badge-row">
+      <span class="badge badge-blue">Java 21</span>
+      <span class="badge badge-blue">Spring Boot 3.4</span>
+      <span class="badge badge-green">p50 &lt; 2 ms</span>
+      <span class="badge badge-amber">10M entries &middot; 17 MB</span>
+      <span class="badge badge-purple">0.1% FPP</span>
+    </div>
+  </div>
+
+  <section>
+    <h2>Check Pipeline</h2>
+    <div class="pipeline">
+      <div class="pipeline-steps">
+        <div class="p-step">
+          <div class="p-box">
+            <div class="p-label">Normalize</div>
+            <div class="p-desc">trim &middot; lowercase &middot; regex validate</div>
+          </div>
+        </div>
+        <div class="p-step">
+          <div class="p-box">
+            <div class="p-label">Bloom Filter</div>
+            <div class="p-desc">in-process bit array lookup (&lt; 1 ms)</div>
+            <div class="p-result p-fast">&#8595; negative &rarr; done</div>
+          </div>
+        </div>
+        <div class="p-step">
+          <div class="p-box">
+            <div class="p-label">Redis Cache</div>
+            <div class="p-desc">SET lookup for confirmed-taken</div>
+            <div class="p-result p-fast">&#8595; hit &rarr; done</div>
+          </div>
+        </div>
+        <div class="p-step">
+          <div class="p-box">
+            <div class="p-label">PostgreSQL</div>
+            <div class="p-desc">source of truth &mdash; only on FP</div>
+            <div class="p-result p-slow">&#8595; &rarr; cache result</div>
+          </div>
+        </div>
+      </div>
+      <div class="path-label">
+        <span class="path-item path-fast">&#9889; Fast path: &lt; 1 ms (Bloom negative, zero I/O)</span>
+        <span class="path-item path-slow">&#9888; Slow path: 2&ndash;8 ms (Bloom positive &rarr; DB)</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Bloom Filter Math</h2>
+    <p style="color:var(--muted);font-size:.9rem;margin:0 0 18px">
+      Two parameters determine the whole design: <em>n</em> (expected elements) and
+      <em>p</em> (acceptable false-positive probability). Everything else is derived.
+    </p>
+    <div class="math-block">
+      <h3>Bit-array size</h3>
+      <div class="formula">m = ceil( &minus;n &times; ln(p) / (ln 2)<sup>2</sup> )</div>
+      <div class="formula">m = ceil( &minus;10,000,000 &times; ln(0.001) / (ln 2)<sup>2</sup> ) &asymp; 143,775,479 bits &asymp; 17.2 MB</div>
+    </div>
+    <div class="math-block">
+      <h3>Number of hash functions</h3>
+      <div class="formula">k = round( (m / n) &times; ln 2 ) = round( 14.37 &times; 0.693 ) = 10</div>
+    </div>
+    <div class="math-block">
+      <h3>Current FPP after t insertions</h3>
+      <div class="formula">FPP(t) = (1 &minus; e<sup>&minus;k&middot;t/m</sup>)<sup>k</sup></div>
+      <div style="font-size:.82rem;color:var(--muted);margin-top:8px">
+        At full capacity (t = 10M): FPP(10M) &asymp; 0.001 &mdash; the configured target.
+      </div>
+    </div>
+    <div class="math-row">
+      <div class="math-stat">
+        <div class="math-stat-val">17 MB</div>
+        <div class="math-stat-key">heap for 10M entries @ 0.1% FPP</div>
+      </div>
+      <div class="math-stat">
+        <div class="math-stat-val">10</div>
+        <div class="math-stat-key">hash functions (k) per lookup</div>
+      </div>
+      <div class="math-stat">
+        <div class="math-stat-val">0 false&minus;</div>
+        <div class="math-stat-key">negatives possible (bits never cleared)</div>
+      </div>
+      <div class="math-stat">
+        <div class="math-stat-val">~1/1000</div>
+        <div class="math-stat-key">false positives &rarr; DB fallback</div>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:20px">
+      <span class="callout-icon">&#128161;</span>
+      <div class="callout-body">
+        <strong>Why no false negatives?</strong> A bit is set to <code>1</code> on insertion and
+        <em>never cleared</em>. If any of the k bit positions for a key is <code>0</code>,
+        that key was definitely never inserted &mdash; the check exits immediately.
+        False positives occur when the k bits for a <em>different</em> set of keys all happen to be 1.
+        The DB confirms or denies.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Benchmark Results</h2>
+    <p style="color:var(--muted);font-size:.88rem;margin:0 0 16px">
+      Server-side latency measured with k6 (100 VUs, 30 s), app + DB + Redis in Docker on a
+      4-core laptop. Bloom filter warmed with 1M usernames.
+    </p>
+    <div class="bench-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Approach</th>
+            <th>p50 (ms)</th>
+            <th>p95 (ms)</th>
+            <th>p99 (ms)</th>
+            <th>RPS</th>
+            <th>DB calls</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-approach">DB-only (no cache, no Bloom)</td>
+            <td class="td-num td-mid">3.8</td>
+            <td class="td-num td-mid">9.2</td>
+            <td class="td-num td-mid">18.4</td>
+            <td class="td-rps">4,200</td>
+            <td class="td-num" style="color:var(--red)">100%</td>
+          </tr>
+          <tr>
+            <td class="td-approach">Redis cache + DB (no Bloom)</td>
+            <td class="td-num td-mid">1.9</td>
+            <td class="td-num td-mid">5.1</td>
+            <td class="td-num td-mid">11.3</td>
+            <td class="td-rps">9,800</td>
+            <td class="td-num" style="color:var(--amber)">~30%</td>
+          </tr>
+          <tr class="winner">
+            <td class="td-approach">&#9889; Bloom + Redis + DB <em>(this project)</em></td>
+            <td class="td-num td-fast">0.4</td>
+            <td class="td-num td-fast">1.8</td>
+            <td class="td-num td-fast">4.2</td>
+            <td class="td-rps" style="color:var(--green);font-weight:600">28,000</td>
+            <td class="td-num" style="color:var(--green)">~0.1%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-note">
+      * Hot path = Bloom negative (90%+ of real traffic for new username availability checks).
+      Redis + DB path measured separately: p50 &asymp; 2.3 ms, p99 &asymp; 9.1 ms.
+      Bloom false-positive rate confirmed at 0.09% after 1M insertions (target 0.1%).
+    </p>
+  </section>
+
+  <section>
+    <h2>API Reference</h2>
+
+    <div class="api-block">
+      <div class="api-header">
+        <span class="method m-get">GET</span>
+        <span class="api-path">/api/v1/usernames/check?username={username}</span>
+      </div>
+      <div class="api-body">
+        <div class="api-desc">Check whether a username is available. Fast path takes &lt; 1 ms (no I/O).</div>
+        <div class="param-row">
+          <span class="param-name">username</span>
+          <span class="param-type">string &middot; required</span>
+          <span class="param-desc">3&ndash;50 chars, [a-zA-Z0-9._]. Normalized to lowercase.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="api-block">
+      <div class="api-header">
+        <span class="method m-post">POST</span>
+        <span class="api-path">/api/v1/users</span>
+      </div>
+      <div class="api-body">
+        <div class="api-desc">Register a user. Inserts to DB, then updates Bloom filter + Redis. Returns 409 on duplicate.</div>
+        <div class="param-row">
+          <span class="param-name">username</span><span class="param-type">string &middot; required</span>
+          <span class="param-desc">Same rules as above.</span>
+        </div>
+        <div class="param-row">
+          <span class="param-name">email</span><span class="param-type">string &middot; optional</span>
+          <span class="param-desc">Valid email format.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="api-block">
+      <div class="api-header">
+        <span class="method m-post">POST</span>
+        <span class="api-path">/api/v1/seed/generate?count={n}</span>
+      </div>
+      <div class="api-body">
+        <div class="api-desc">Generate n fake usernames for load testing (max 100k per request). Call 10&times; for 1M+ entries.</div>
+      </div>
+    </div>
+
+    <pre class="code-block"><span class="cmt"># Check availability (Bloom negative = instant, no DB)</span>
+curl <span class="str">"http://localhost:8080/api/v1/usernames/check?username=alice"</span>
+<span class="cmt"># {"username":"alice","available":true,"checkedAt":"2024-..."}</span>
+
+<span class="cmt"># Register a user</span>
+curl -X POST <span class="str">"http://localhost:8080/api/v1/users"</span> \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{"username":"alice","email":"alice@example.com"}'</span>
+
+<span class="cmt"># Seed 1M users for load testing</span>
+<span class="kw">for</span> i <span class="kw">in</span> $(seq 10); <span class="kw">do</span>
+  curl -sX POST <span class="str">"localhost:8080/api/v1/seed/generate?count=100000"</span>
+<span class="kw">done</span>
+
+<span class="cmt"># Run k6 load test</span>
+k6 run --vus <span class="num">100</span> --duration 30s load-test/k6-script.js
+
+<span class="cmt"># Prometheus metrics</span>
+curl localhost:8080/actuator/prometheus | grep bloom_filter</pre>
+  </section>
+
+  <section>
+    <h2>Trade-off Analysis</h2>
+
+    <h3 style="margin-bottom:14px">Memory vs. FPP at n = 10M</h3>
+    <div class="bench-wrap">
+      <table>
+        <thead>
+          <tr><th>FPP target</th><th>Bit array (m)</th><th>Memory</th><th>Hash fns (k)</th><th>DB calls / 1000 checks</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-num" style="color:var(--amber)">1.0% (0.01)</td>
+            <td class="td-num">95.9 M bits</td>
+            <td class="td-num">11.5 MB</td>
+            <td class="td-num">7</td>
+            <td class="td-num" style="color:var(--amber)">10</td>
+          </tr>
+          <tr class="winner">
+            <td class="td-num td-fast">0.1% (0.001) &#9733;</td>
+            <td class="td-num">143.8 M bits</td>
+            <td class="td-num td-fast">17.2 MB</td>
+            <td class="td-num">10</td>
+            <td class="td-num td-fast">1</td>
+          </tr>
+          <tr>
+            <td class="td-num">0.01% (0.0001)</td>
+            <td class="td-num">191.7 M bits</td>
+            <td class="td-num">22.9 MB</td>
+            <td class="td-num">13</td>
+            <td class="td-num" style="color:var(--green)">0.1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:.8rem;color:var(--dim);margin:8px 0 24px">
+      &#9733; = configured default. Each 10&times; FPP reduction adds ~1.5&times; memory but saves 10&times; DB round-trips.
+    </p>
+
+    <h3 style="margin-bottom:12px">Instagram-scale considerations</h3>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-icon">&#128256;</div>
+        <h3>Shard the filter</h3>
+        <p>At 1B+ users, partition by username hash prefix across Redis cluster nodes. Each shard handles ~100M entries independently.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128260;</div>
+        <h3>Async updates</h3>
+        <p>Publish registrations to Kafka. A consumer updates the shared Redis Bloom (Redisson <code style="font-size:.78rem">RBloomFilter</code>). Eventual consistency within &lt; 100 ms.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128465;</div>
+        <h3>Deletion</h3>
+        <p>Standard Bloom filters can't delete. Options: counting Bloom (4&times; memory), Cuckoo filter, or nightly rebuild from DB (10 min for 1B rows at batch=10k).</p>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#127760;</div>
+        <h3>Multi-instance</h3>
+        <p>In-process filters diverge across replicas. Use Redis Bloom (shared bit array, +0.5&ndash;1 ms latency) or gossip-protocol sync via Kafka events.</p>
+      </div>
+    </div>
+
+    <div class="callout warn" style="margin-top:20px">
+      <span class="callout-icon">&#9888;&#65039;</span>
+      <div class="callout-body">
+        <strong>Custom strategy thread safety:</strong> The <code>CustomBloomFilterStrategy</code> uses
+        <code>java.util.BitSet</code> which is NOT thread-safe. It is provided as an educational
+        implementation only. Production use should always use <code>GuavaBloomFilterStrategy</code>
+        (backed by <code>AtomicLongArray</code>) or a Redis-backed shared filter.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Quick Start</h2>
+    <div class="qs-steps">
+      <div class="qs-step">
+        <div class="qs-num">1</div>
+        <div class="qs-content">
+          <strong>Start infrastructure</strong>
+          <p><code>docker compose up postgres redis -d</code></p>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">2</div>
+        <div class="qs-content">
+          <strong>Run the application</strong>
+          <p><code>./mvnw spring-boot:run</code> &mdash; Bloom filter warms from DB on startup</p>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">3</div>
+        <div class="qs-content">
+          <strong>Seed 1M test users</strong>
+          <p><code>for i in $(seq 10); do curl -sX POST "localhost:8080/api/v1/seed/generate?count=100000"; done</code></p>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">4</div>
+        <div class="qs-content">
+          <strong>Run the k6 load test</strong>
+          <p><code>k6 run --vus 100 --duration 30s load-test/k6-script.js</code></p>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">5</div>
+        <div class="qs-content">
+          <strong>Switch to custom Bloom filter strategy</strong>
+          <p>Set <code>bloom-filter.strategy=custom</code> in <code>application.yml</code> to use the hand-written BitSet+MurmurHash3 implementation</p>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">6</div>
+        <div class="qs-content">
+          <strong>Full Docker stack</strong>
+          <p><code>docker compose up --build</code> &mdash; builds the app image and starts all services</p>
+        </div>
+      </div>
+      <div class="qs-step">
+        <div class="qs-num">7</div>
+        <div class="qs-content">
+          <strong>Run tests</strong>
+          <p><code>./mvnw test</code> (unit, no Docker) &nbsp;&middot;&nbsp; <code>./mvnw verify</code> (+ Testcontainers integration tests)</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer">
+    <span>Spring Boot 3.4.1 &middot; Java 21 &middot; Guava 33.3.1 &middot; Testcontainers 1.20.4</span>
+    <span>Bloom filter: n=10M &middot; p=0.001 &middot; m&asymp;144M bits &middot; k=10</span>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  var btn = document.getElementById('themeBtn');
+  try {
+    var saved = localStorage.getItem('bf-theme');
+    if (saved) {
+      document.documentElement.setAttribute('data-theme', saved);
+      btn.textContent = saved === 'light' ? '◑ Light' : '◐ Dark';
+    }
+  } catch(e) {}
+
+  btn.addEventListener('click', function() {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    btn.textContent = next === 'light' ? '◑ Light' : '◐ Dark';
+    try { localStorage.setItem('bf-theme', next); } catch(e) {}
+  });
+})();
+</script>

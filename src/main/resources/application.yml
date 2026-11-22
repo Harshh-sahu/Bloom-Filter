@@ -1,0 +1,130 @@
+server:
+  port: 8080
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 20
+    accept-count: 100
+
+spring:
+  # Java 21 virtual threads — eliminates blocking-thread cost on slow DB calls
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/bloomfilter
+    username: bloomfilter
+    password: bloomfilter
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # Sized to match expected DB concurrency; virtual threads don't block OS threads
+      # but DB connections are still a finite resource.
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 3000       # ms; fail fast rather than queue
+      idle-timeout: 60000
+      max-lifetime: 1800000
+      connection-test-query: SELECT 1
+      pool-name: BloomFilterPool
+      data-source-properties:
+        reWriteBatchedInserts: true   # PostgreSQL batch insert optimization
+        prepareThreshold: 5           # use server-side prepared statements
+
+  jpa:
+    hibernate:
+      ddl-auto: update    # use 'validate' + Flyway in production
+    show-sql: false
+    open-in-view: false   # prevents lazy-loading issues + improves perf
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 1000
+          fetch_size: 1000   # server-side cursor for streaming queries
+        order_inserts: true
+        order_updates: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 1000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 500ms
+        # Keep connections warm; avoids per-request TCP handshake
+        shutdown-timeout: 100ms
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bloom Filter
+# ─────────────────────────────────────────────────────────────────────────────
+bloom-filter:
+  # n = 10 million expected usernames
+  expected-insertions: 10_000_000
+  # p = 0.001 (0.1% FPP) → ~17 MB bit array, 10 hash functions
+  # Lower p → more memory, fewer DB round-trips.
+  # At 1% FPP (0.01) you'd need only ~11.5 MB but 10× more DB calls.
+  false-positive-probability: 0.001
+  # "guava" = Guava BloomFilter (thread-safe, recommended for production)
+  # "custom" = hand-written BitSet+MurmurHash3 (shows internals)
+  strategy: guava
+  # Rows per batch during startup warmup (stream from DB)
+  batch-size: 10_000
+  warmup-on-startup: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Actuator + Prometheus
+# ─────────────────────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        bloom_filter.check: true
+      percentiles:
+        http.server.requests: 0.5, 0.95, 0.99
+        bloom_filter.check: 0.5, 0.95, 0.99
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+logging:
+  level:
+    com.bloomfilter: DEBUG
+    org.hibernate.SQL: WARN
+    com.zaxxer.hikari: INFO
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# Test profile (used by integration tests with Testcontainers)
+# ─────────────────────────────────────────────────────────────────────────────
+spring:
+  config:
+    activate:
+      on-profile: test
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+bloom-filter:
+  warmup-on-startup: false  # skip warmup in tests
+  expected-insertions: 10_000
+  false-positive-probability: 0.01

@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Bloom Filter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* ── Tokens (dark first) ───────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --bg:    #060a14;
+  --bg2:   #0a1020;
+  --s1:    rgba(10,16,32,0.9);
+  --s2:    rgba(14,22,44,0.76);
+  --b1:    rgba(45,85,180,0.14);
+  --b2:    rgba(0,210,255,0.22);
+  --t:     #9ab4d4;
+  --th:    #d4e8ff;
+  --tm:    #4a6484;
+  --td:    #1e3050;
+  --cyan:  #00d4ff;
+  --cg:    rgba(0,212,255,0.32);
+  --cs:    rgba(0,212,255,0.08);
+  --vio:   #8b5cf6;
+  --vg:    rgba(139,92,246,0.28);
+  --vs:    rgba(139,92,246,0.08);
+  --grn:   #34d399;
+  --grnS:  rgba(52,211,153,0.11);
+  --red:   #f43f5e;
+  --redS:  rgba(244,63,94,0.11);
+  --amb:   #fbbf24;
+  --ambS:  rgba(251,191,36,0.1);
+  --shad:  rgba(0,0,0,0.5);
+  --glass: rgba(255,255,255,0.025);
+  --r:     14px;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg:#f1f5ff; --bg2:#e6eeff;
+    --s1:rgba(255,255,255,0.92); --s2:rgba(238,245,255,0.85);
+    --b1:rgba(90,130,230,0.14);  --b2:rgba(0,112,200,0.26);
+    --t:#374e72; --th:#0d1c38; --tm:#6880a4; --td:#a8bcd4;
+    --cyan:#0280c4; --cg:rgba(2,128,196,0.22); --cs:rgba(2,128,196,0.07);
+    --vio:#6d28d9;  --vg:rgba(109,40,217,0.17); --vs:rgba(109,40,217,0.06);
+    --grn:#059669;  --grnS:rgba(5,150,105,0.09);
+    --red:#dc2626;  --redS:rgba(220,38,38,0.09);
+    --amb:#d97706;  --ambS:rgba(217,119,6,0.09);
+    --shad:rgba(40,80,180,0.1); --glass:rgba(255,255,255,0.55);
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg:#f1f5ff; --bg2:#e6eeff;
+  --s1:rgba(255,255,255,0.92); --s2:rgba(238,245,255,0.85);
+  --b1:rgba(90,130,230,0.14);  --b2:rgba(0,112,200,0.26);
+  --t:#374e72; --th:#0d1c38; --tm:#6880a4; --td:#a8bcd4;
+  --cyan:#0280c4; --cg:rgba(2,128,196,0.22); --cs:rgba(2,128,196,0.07);
+  --vio:#6d28d9;  --vg:rgba(109,40,217,0.17); --vs:rgba(109,40,217,0.06);
+  --grn:#059669;  --grnS:rgba(5,150,105,0.09);
+  --red:#dc2626;  --redS:rgba(220,38,38,0.09);
+  --amb:#d97706;  --ambS:rgba(217,119,6,0.09);
+  --shad:rgba(40,80,180,0.1); --glass:rgba(255,255,255,0.55);
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg:#060a14; --bg2:#0a1020;
+  --s1:rgba(10,16,32,0.9); --s2:rgba(14,22,44,0.76);
+  --b1:rgba(45,85,180,0.14); --b2:rgba(0,210,255,0.22);
+  --t:#9ab4d4; --th:#d4e8ff; --tm:#4a6484; --td:#1e3050;
+  --cyan:#00d4ff; --cg:rgba(0,212,255,0.32); --cs:rgba(0,212,255,0.08);
+  --vio:#8b5cf6;  --vg:rgba(139,92,246,0.28); --vs:rgba(139,92,246,0.08);
+  --grn:#34d399;  --grnS:rgba(52,211,153,0.11);
+  --red:#f43f5e;  --redS:rgba(244,63,94,0.11);
+  --amb:#fbbf24;  --ambS:rgba(251,191,36,0.1);
+  --shad:rgba(0,0,0,0.5); --glass:rgba(255,255,255,0.025);
+}
+
+/* ── Reset ── */
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
+html, body { height:100% }
+body {
+  background: var(--bg);
+  color: var(--t);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background .4s, color .4s;
+}
+
+/* ── Canvas ── */
+#bgc {
+  position:fixed; inset:0;
+  z-index:0; pointer-events:none;
+  opacity:.7;
+}
+
+/* ── Dot-grid overlay ── */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image: radial-gradient(var(--b1) 1px, transparent 1px);
+  background-size: 28px 28px;
+  z-index:0; pointer-events:none;
+  opacity:.6;
+  transition: opacity .4s;
+}
+
+/* ── Above bg ── */
+header, .layout, #toast { position:relative; z-index:10 }
+
+/* ── Header ── */
+header {
+  background: var(--s1);
+  border-bottom: 1px solid var(--b2);
+  padding: 0 28px; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 2px 32px var(--shad);
+}
+.logo {
+  display: flex; align-items: center; gap: 12px;
+  font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 16px;
+  letter-spacing: -.02em; text-decoration: none;
+}
+.logo-mark {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--cyan), var(--vio));
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; color: #fff;
+  box-shadow: 0 0 20px var(--cg);
+  animation: markPulse 4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes markPulse {
+  0%,100% { box-shadow: 0 0 16px var(--cg) }
+  50% { box-shadow: 0 0 32px var(--cg), 0 0 48px var(--vg) }
+}
+.logo-name {
+  background: linear-gradient(90deg, var(--cyan) 20%, var(--vio));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hdr-right { display:flex; align-items:center; gap:10px }
+.status-pill {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--tm);
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 20px; padding: 5px 14px;
+  backdrop-filter: blur(10px);
+  font-family: 'JetBrains Mono', monospace;
+}
+.sdot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--td); transition: all .4s; flex-shrink: 0;
+}
+.sdot.up {
+  background: var(--grn);
+  box-shadow: 0 0 8px var(--grn), 0 0 16px rgba(52,211,153,.3);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+.sdot.down { background: var(--red); box-shadow: 0 0 8px var(--red) }
+@keyframes dotPulse {
+  0%,100% { box-shadow: 0 0 6px var(--grn) }
+  50% { box-shadow: 0 0 14px var(--grn), 0 0 24px rgba(52,211,153,.4) }
+}
+.theme-btn {
+  width: 40px; height: 40px;
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 10px; color: var(--t); cursor: pointer;
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s;
+}
+.theme-btn:hover { border-color: var(--b2); box-shadow: 0 0 14px var(--cg); transform: rotate(20deg) scale(1.05) }
+
+/* ── Layout ── */
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 22px;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr } }
+
+/* ── Cards ── */
+.card {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: var(--r);
+  overflow: visible;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px var(--shad), inset 0 1px 0 var(--glass);
+  transition: border-color .35s, box-shadow .35s;
+  transform-style: preserve-3d;
+  will-change: transform;
+  position: relative;
+}
+.card::after {
+  content: '';
+  position: absolute; inset: -1px;
+  border-radius: calc(var(--r) + 1px);
+  background: linear-gradient(135deg, var(--cyan), var(--vio), var(--cyan));
+  background-size: 300% 300%;
+  z-index: -1; opacity: 0;
+  transition: opacity .35s;
+  animation: borderSpin 4s linear infinite;
+}
+@keyframes borderSpin {
+  0%   { background-position: 0% 50% }
+  50%  { background-position: 100% 50% }
+  100% { background-position: 0% 50% }
+}
+.card:hover { border-color: transparent; box-shadow: 0 16px 48px var(--shad), 0 0 0 1px var(--b2) }
+.card:hover::after { opacity: .6 }
+.card-hd {
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--b1);
+  display: flex; align-items: center; gap: 11px;
+  border-radius: var(--r) var(--r) 0 0;
+  overflow: hidden;
+}
+.card-hd h2 {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 14px; font-weight: 700;
+  color: var(--th); letter-spacing: -.01em;
+}
+.card-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.ic-cyan  { background: var(--cs); box-shadow: 0 0 10px var(--cg) }
+.ic-green { background: var(--grnS); box-shadow: 0 0 10px rgba(52,211,153,.2) }
+.ic-amb   { background: var(--ambS); box-shadow: 0 0 10px rgba(251,191,36,.2) }
+.ic-vio   { background: var(--vs);  box-shadow: 0 0 10px var(--vg) }
+.badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 500;
+  padding: 3px 10px; border-radius: 20px;
+  background: var(--cs); color: var(--cyan);
+  border: 1px solid rgba(0,212,255,.18);
+  margin-left: auto;
+}
+.card-bd { padding: 20px; overflow: hidden; border-radius: 0 0 var(--r) var(--r) }
+
+/* ── Bit array ── */
+.bit-array {
+  display: flex; flex-wrap: wrap; gap: 3px;
+  padding: 12px;
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 10px; margin-bottom: 16px;
+  min-height: 46px;
+  position: relative; overflow: hidden;
+}
+.bit-array::before {
+  content: 'bit array';
+  position: absolute; top: 5px; right: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: var(--td); letter-spacing: .08em; text-transform: uppercase;
+}
+.bit {
+  width: 9px; height: 9px; border-radius: 2px;
+  background: var(--b1); border: 1px solid var(--b1);
+  transition: background .15s, box-shadow .15s;
+  flex-shrink: 0;
+}
+.bit.on {
+  background: var(--cyan); border-color: var(--cyan);
+  box-shadow: 0 0 5px var(--cg);
+}
+.bit.flash {
+  background: var(--grn); border-color: var(--grn);
+  box-shadow: 0 0 10px rgba(52,211,153,.7);
+  animation: bitFlash .4s ease;
+}
+.bit.hit {
+  background: var(--vio); border-color: var(--vio);
+  box-shadow: 0 0 8px var(--vg);
+}
+@keyframes bitFlash {
+  0% { transform: scale(1.8); opacity: 1 }
+  60% { transform: scale(1.1) }
+  100% { transform: scale(1) }
+}
+
+/* ── Inputs ── */
+.input-row { display:flex; gap:9px; margin-bottom:16px }
+input[type="text"], input[type="email"], input[type="number"] {
+  background: var(--s2);
+  border: 1px solid var(--b1);
+  border-radius: 10px;
+  color: var(--th);
+  font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  padding: 11px 15px; outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  width: 100%;
+}
+input::placeholder { color: var(--td) }
+input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cs), 0 0 18px var(--cg) }
+input.invalid { border-color: var(--red) !important; box-shadow: 0 0 0 3px var(--redS) !important }
+
+/* ── Buttons ── */
+.btn {
+  position: relative; overflow: hidden;
+  background: linear-gradient(135deg, var(--cyan), #0066ff);
+  color: #fff; border: none; border-radius: 10px;
+  font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: .01em;
+  padding: 11px 20px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: transform .15s, box-shadow .15s, opacity .15s;
+}
+.btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.18), transparent);
+  opacity: 0; transition: opacity .15s;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px var(--cg) }
+.btn:hover::before { opacity: 1 }
+.btn:active { transform: scale(.97) translateY(0) }
+.btn:disabled { opacity:.4; cursor:default; transform:none; box-shadow:none }
+.btn-g { background: linear-gradient(135deg, var(--grn), #059669); color: #fff }
+.btn-g:hover { box-shadow: 0 8px 24px rgba(52,211,153,.3) }
+.btn-ghost {
+  background: var(--s2); border: 1px solid var(--b1); color: var(--t);
+}
+.btn-ghost:hover { border-color: var(--b2); color: var(--cyan); box-shadow: 0 0 14px var(--cg) }
+
+/* ── Result banner ── */
+.rbanner {
+  display: none; border-radius: 11px;
+  padding: 14px 18px; margin-bottom: 16px; border: 1px solid;
+}
+.rbanner.ok {
+  display: flex; background: var(--grnS); border-color: var(--grn);
+  box-shadow: 0 0 24px rgba(52,211,153,.15);
+  animation: sprIn .35s cubic-bezier(.34,1.56,.64,1);
+}
+.rbanner.no {
+  display: flex; background: var(--redS); border-color: var(--red);
+  box-shadow: 0 0 24px rgba(244,63,94,.15);
+  animation: sprIn .35s cubic-bezier(.34,1.56,.64,1);
+}
+.rbanner.warn {
+  display: flex; background: var(--ambS); border-color: var(--amb);
+  animation: sprIn .25s ease;
+}
+@keyframes sprIn {
+  from { opacity:0; transform: scale(.92) translateY(-10px) }
+  to   { opacity:1; transform: scale(1) translateY(0) }
+}
+.ri { font-size: 22px; margin-right: 14px; flex-shrink: 0; line-height: 1 }
+.rt { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 14px; margin-bottom: 2px }
+.rs { font-size: 11px; color: var(--tm); margin-top: 1px }
+.rbanner.ok .rt   { color: var(--grn) }
+.rbanner.no .rt   { color: var(--red) }
+.rbanner.warn .rt { color: var(--amb) }
+
+/* ── History ── */
+.hlabel {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--tm); margin-bottom: 8px;
+}
+.hlist {
+  display: flex; flex-direction: column; gap: 4px;
+  max-height: 190px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--b2) transparent;
+}
+.hi {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 11px;
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+  animation: slideIn .2s ease;
+}
+@keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
+.hi:hover { border-color: var(--cyan); transform: translateX(3px) }
+.hi .hn  { color: var(--th) }
+.hi .hs  { font-size:11px; font-weight:600; padding:2px 8px; border-radius:10px }
+.hs-ok   { background: var(--grnS); color: var(--grn) }
+.hs-no   { background: var(--redS); color: var(--red) }
+.hi .hms { color: var(--td); font-size: 11px }
+
+/* ── Forms ── */
+.fg { margin-bottom: 14px }
+.fl {
+  display: block; font-size: 11px; font-weight: 700;
+  font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: .05em;
+  color: var(--tm); margin-bottom: 6px; text-transform: uppercase;
+}
+.fhint { font-size: 11px; color: var(--td); margin-top: 4px }
+.ferr  { font-size: 11px; color: var(--red); margin-top: 4px; display: none }
+
+/* ── Info rows ── */
+.inforow {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; padding: 7px 0;
+}
+.inforow:not(:last-child) { border-bottom: 1px solid var(--b1) }
+.ik { color: var(--tm) }
+.iv { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan) }
+
+/* ── Metrics ── */
+.mgrid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:14px }
+.mtile {
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 10px; padding: 12px 14px;
+  transition: transform .2s, border-color .2s, box-shadow .2s;
+  cursor: default; position: relative; overflow: hidden;
+}
+.mtile::before {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, var(--cyan), var(--vio));
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .3s;
+}
+.mtile:hover { transform: translateY(-3px); border-color: var(--b2); box-shadow: 0 8px 24px var(--shad) }
+.mtile:hover::before { transform: scaleX(1) }
+.mv {
+  font-family: 'Plus Jakarta Sans', sans-serif; font-size: 24px; font-weight: 800;
+  color: var(--th); font-variant-numeric: tabular-nums;
+  line-height: 1; margin-bottom: 4px; transition: color .3s;
+}
+.mv.c { color: var(--cyan); text-shadow: 0 0 16px var(--cg) }
+.mv.g { color: var(--grn);  text-shadow: 0 0 16px rgba(52,211,153,.4) }
+.mv.r { color: var(--red);  text-shadow: 0 0 16px rgba(244,63,94,.4) }
+.mv.a { color: var(--amb);  text-shadow: 0 0 16px rgba(251,191,36,.4) }
+.mv.v { color: var(--vio);  text-shadow: 0 0 16px var(--vg) }
+.mk { font-size: 11px; color: var(--tm); line-height: 1.4 }
+
+/* ── Latency bars ── */
+.lrow { display:flex; align-items:center; gap:10px; margin-bottom:9px }
+.ll   { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--tm); width:28px; flex-shrink:0 }
+.lbw  { flex:1; height:5px; background:var(--b1); border-radius:3px; overflow:hidden }
+.lb   { height:100%; border-radius:3px; transition:width .5s cubic-bezier(.4,0,.2,1); background:var(--cyan); box-shadow:0 0 6px var(--cg) }
+.lv   { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--tm); width:52px; text-align:right }
+
+/* ── Range ── */
+.rrow { display:flex; align-items:center; gap:12px; margin-top:8px }
+input[type="range"] {
+  flex:1; height:4px; cursor:pointer;
+  accent-color: var(--cyan); border:none; padding:0;
+  background: var(--b1); border-radius:2px;
+}
+.rv { font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--cyan); min-width:52px; text-align:right }
+
+/* ── Progress ── */
+.prog {
+  display:none; margin-top:12px;
+  background:var(--s2); border:1px solid var(--b1);
+  border-radius:10px; padding:12px 14px;
+}
+.prog.show { display:block; animation:fadeUp .2s ease }
+@keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+.ptrack { height:5px; background:var(--b1); border-radius:3px; overflow:hidden; margin-top:9px }
+.pfill {
+  height:100%;
+  background: linear-gradient(90deg, var(--cyan), var(--vio));
+  border-radius:3px; width:0%; transition:width .4s;
+  box-shadow: 0 0 10px var(--cg);
+}
+.ptxt { font-size:12px; color:var(--tm) }
+.ptxt span { color:var(--cyan); font-weight:600; font-family:'JetBrains Mono',monospace }
+
+/* ── Toast ── */
+#toast {
+  position:fixed; bottom:28px; right:28px;
+  background:var(--s1); border:1px solid var(--b2);
+  border-radius:12px; padding:13px 20px; font-size:13px;
+  backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+  box-shadow:0 12px 40px var(--shad);
+  transform:translateY(100px) scale(.9); opacity:0;
+  transition:all .3s cubic-bezier(.34,1.56,.64,1);
+  z-index:999; max-width:320px;
+}
+#toast.show    { transform:translateY(0) scale(1); opacity:1 }
+#toast.success { border-color:var(--grn); box-shadow:0 12px 40px var(--shad),0 0 24px rgba(52,211,153,.2) }
+#toast.error   { border-color:var(--red); box-shadow:0 12px 40px var(--shad),0 0 24px rgba(244,63,94,.2) }
+
+/* ── Misc ── */
+.div   { border:none; border-top:1px solid var(--b1); margin:16px 0 }
+.lcol, .rcol { display:flex; flex-direction:column; gap:22px }
+.refbtn {
+  background:none; border:none; color:var(--tm);
+  cursor:pointer; font-size:14px; padding:3px 7px;
+  border-radius:6px; transition:color .15s, transform .4s;
+  margin-left:auto;
+}
+.refbtn:hover { color:var(--cyan); transform:rotate(180deg) }
+.spinner {
+  display:inline-block; width:13px; height:13px;
+  border:2px solid var(--b2); border-top-color:var(--cyan);
+  border-radius:50%; animation:spin .6s linear infinite;
+  vertical-align:middle;
+}
+@keyframes spin { to { transform:rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms!important; transition-duration:.01ms!important }
+}
+</style>
+</head>
+<body>
+
+<canvas id="bgc"></canvas>
+
+<header>
+  <a class="logo" href="#">
+    <div class="logo-mark">◎</div>
+    <span class="logo-name">Bloom Filter</span>
+  </a>
+  <div class="hdr-right">
+    <div class="status-pill">
+      <div class="sdot" id="statusDot"></div>
+      <span id="statusText">Connecting…</span>
+    </div>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle dark/light mode" aria-label="Toggle theme">🌙</button>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- LEFT COLUMN -->
+  <div class="lcol">
+
+    <div class="card" id="card0">
+      <div class="card-hd">
+        <div class="card-icon ic-cyan">⚡</div>
+        <h2>Username Availability</h2>
+        <span class="badge" id="checkCount">0 checks</span>
+      </div>
+      <div class="card-bd">
+        <div class="bit-array" id="bitArray"></div>
+
+        <div class="input-row">
+          <input type="text" id="checkInput" placeholder="enter username…"
+                 maxlength="50" autocomplete="off" spellcheck="false">
+          <button class="btn" id="checkBtn" onclick="checkUsername()">Check</button>
+        </div>
+
+        <div class="rbanner" id="resultBanner">
+          <div class="ri"></div>
+          <div><div class="rt"></div><div class="rs"></div></div>
+        </div>
+
+        <div class="inforow">
+          <span class="ik">Last response time</span>
+          <span class="iv" id="lastLatency">—</span>
+        </div>
+        <div class="inforow">
+          <span class="ik">Normalized username</span>
+          <span class="iv" id="normalizedUser">—</span>
+        </div>
+
+        <div class="div"></div>
+        <div class="hlabel">Recent checks</div>
+        <div class="hlist" id="historyList">
+          <div style="color:var(--td);font-size:12px;padding:6px 0">No checks yet</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="card1">
+      <div class="card-hd">
+        <div class="card-icon ic-green">✦</div>
+        <h2>Register User</h2>
+      </div>
+      <div class="card-bd">
+        <div class="fg">
+          <label class="fl">Username</label>
+          <input type="text" id="regUsername" placeholder="alice_123" maxlength="50" autocomplete="off">
+          <div class="fhint">3–50 chars · letters / digits / dots / underscores</div>
+          <div class="ferr" id="regUsernameErr"></div>
+        </div>
+        <div class="fg">
+          <label class="fl">Email <span style="font-weight:400;text-transform:none;letter-spacing:0;opacity:.6">(optional)</span></label>
+          <input type="email" id="regEmail" placeholder="alice@example.com">
+          <div class="ferr" id="regEmailErr"></div>
+        </div>
+        <button class="btn btn-g" style="width:100%" onclick="registerUser()">Create Account</button>
+        <div class="rbanner" id="regResult" style="margin-top:14px;margin-bottom:0"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT COLUMN -->
+  <div class="rcol">
+
+    <div class="card" id="card2">
+      <div class="card-hd">
+        <div class="card-icon ic-vio">◈</div>
+        <h2>Live Metrics</h2>
+        <button class="refbtn" onclick="loadMetrics()" title="Refresh">↻</button>
+      </div>
+      <div class="card-bd">
+        <div class="mgrid">
+          <div class="mtile"><div class="mv g" id="mNegative">—</div><div class="mk">Bloom negatives<br>(no DB call)</div></div>
+          <div class="mtile"><div class="mv a" id="mPositive">—</div><div class="mk">Bloom positives<br>(DB checked)</div></div>
+          <div class="mtile"><div class="mv r" id="mFalsePos">—</div><div class="mk">False positives<br>(Bloom wrong)</div></div>
+          <div class="mtile"><div class="mv c" id="mCacheHit">—</div><div class="mk">Cache hit<br>ratio</div></div>
+        </div>
+
+        <div class="hlabel" style="margin-bottom:10px">Latency — this session</div>
+        <div class="lrow"><div class="ll">p50</div><div class="lbw"><div class="lb" id="p50bar" style="width:0%"></div></div><div class="lv" id="p50val">—</div></div>
+        <div class="lrow"><div class="ll">p95</div><div class="lbw"><div class="lb" id="p95bar" style="width:0%;background:var(--amb);box-shadow:0 0 6px rgba(251,191,36,.5)"></div></div><div class="lv" id="p95val">—</div></div>
+        <div class="lrow"><div class="ll">p99</div><div class="lbw"><div class="lb" id="p99bar" style="width:0%;background:var(--red);box-shadow:0 0 6px rgba(244,63,94,.5)"></div></div><div class="lv" id="p99val">—</div></div>
+
+        <div class="div"></div>
+        <div class="inforow"><span class="ik">Filter strategy</span><span class="iv" id="mStrategy">—</span></div>
+        <div class="inforow"><span class="ik">Total users in DB</span><span class="iv" id="mTotal">—</span></div>
+        <div class="inforow"><span class="ik">Last refreshed</span><span class="iv" id="mRefreshed">—</span></div>
+      </div>
+    </div>
+
+    <div class="card" id="card3">
+      <div class="card-hd">
+        <div class="card-icon ic-amb">⬡</div>
+        <h2>Seed Test Data</h2>
+      </div>
+      <div class="card-bd">
+        <div class="fg">
+          <label class="fl">Users to generate</label>
+          <div class="rrow">
+            <input type="range" id="seedRange" min="100" max="10000" step="100" value="1000"
+                   oninput="document.getElementById('seedRangeVal').textContent=Number(this.value).toLocaleString()">
+            <span class="rv" id="seedRangeVal">1,000</span>
+          </div>
+        </div>
+        <button class="btn" style="width:100%;background:linear-gradient(135deg,var(--amb),#f97316)" onclick="seedData()">Generate Users</button>
+        <div class="prog" id="seedProgress">
+          <div class="ptxt">Seeding… <span id="seedProgressText">0</span> users created</div>
+          <div class="ptrack"><div class="pfill" id="seedProgressFill"></div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ── Theme ── */
+let _dark = !matchMedia('(prefers-color-scheme: light)').matches;
+function toggleTheme() {
+  _dark = !_dark;
+  document.documentElement.setAttribute('data-theme', _dark ? 'dark' : 'light');
+  document.getElementById('themeBtn').textContent = _dark ? '🌙' : '☀️';
+  _initCanvas();
+}
+
+/* ── 3D card tilt ── */
+document.querySelectorAll('.card').forEach(card => {
+  let tx = 0, ty = 0, raf;
+  card.addEventListener('mousemove', e => {
+    const rect = card.getBoundingClientRect();
+    tx = ((e.clientX - rect.left) / rect.width  - .5) * 8;
+    ty = ((e.clientY - rect.top)  / rect.height - .5) * -8;
+    if (!raf) raf = requestAnimationFrame(() => {
+      card.style.transform = `perspective(700px) rotateY(${tx}deg) rotateX(${ty}deg) translateZ(6px)`;
+      raf = null;
+    });
+  });
+  card.addEventListener('mouseleave', () => {
+    card.style.transform = '';
+    tx = 0; ty = 0;
+  });
+});
+
+/* ── Bit array visualization ── */
+const BA_TOTAL = 24 * 4;
+const bitArr = document.getElementById('bitArray');
+const bits = [];
+for (let i = 0; i < BA_TOTAL; i++) {
+  const b = document.createElement('div');
+  b.className = 'bit';
+  bitArr.appendChild(b);
+  bits.push(b);
+}
+setInterval(() => {
+  const i = Math.floor(Math.random() * BA_TOTAL);
+  bits[i].classList.toggle('on');
+  setTimeout(() => { if (Math.random() > .55) bits[i].classList.remove('on') }, 600 + Math.random() * 1000);
+}, 100);
+
+function flashBits(username) {
+  if (!username) return;
+  const positions = [];
+  for (let h = 0; h < 7; h++) {
+    let hash = (h + 1) * 2654435761;
+    for (let j = 0; j < username.length; j++) hash = Math.imul(hash ^ username.charCodeAt(j), 0x9e3779b9);
+    positions.push(Math.abs(hash >>> 0) % BA_TOTAL);
+  }
+  positions.forEach((p, i) => {
+    setTimeout(() => {
+      bits[p].classList.remove('on');
+      bits[p].classList.add('flash');
+      setTimeout(() => { bits[p].classList.remove('flash'); bits[p].classList.add('hit') }, 400);
+      setTimeout(() => bits[p].classList.remove('hit'), 1800);
+    }, i * 55);
+  });
+}
+
+/* ── Canvas particle background ── */
+const canvas = document.getElementById('bgc');
+const ctx = canvas.getContext('2d');
+let _pts = [], _animId;
+
+function _initCanvas() {
+  cancelAnimationFrame(_animId);
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const n = Math.min(80, Math.floor(innerWidth * innerHeight / 18000));
+  _pts = Array.from({ length: n }, () => ({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - .5) * .28,
+    vy: (Math.random() - .5) * .28,
+    r: Math.random() * 1.4 + .4,
+    alpha: Math.random() * .45 + .1,
+    ph: Math.random() * Math.PI * 2
+  }));
+  _drawCanvas();
+}
+function _drawCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const pc = _dark ? '0,180,255' : '0,100,200';
+  _pts.forEach(p => {
+    p.x += p.vx; p.y += p.vy; p.ph += .018;
+    if (p.x < 0) p.x = canvas.width;  if (p.x > canvas.width)  p.x = 0;
+    if (p.y < 0) p.y = canvas.height; if (p.y > canvas.height) p.y = 0;
+    const a = p.alpha * (.55 + .45 * Math.sin(p.ph));
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${pc},${a})`; ctx.fill();
+  });
+  for (let i = 0; i < _pts.length; i++) {
+    for (let j = i + 1; j < _pts.length; j++) {
+      const dx = _pts[i].x - _pts[j].x, dy = _pts[i].y - _pts[j].y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 95) {
+        ctx.beginPath();
+        ctx.moveTo(_pts[i].x, _pts[i].y); ctx.lineTo(_pts[j].x, _pts[j].y);
+        ctx.strokeStyle = `rgba(${pc},${.07 * (1 - d / 95)})`;
+        ctx.lineWidth = .6; ctx.stroke();
+      }
+    }
+  }
+  _animId = requestAnimationFrame(_drawCanvas);
+}
+addEventListener('resize', _initCanvas);
+_initCanvas();
+
+/* ── Backend base URL ── */
+const BASE = location.protocol === 'file:'
+  ? 'http://localhost:8080'
+  : location.origin.includes('8080') ? '' : 'http://localhost:8080';
+
+if (location.protocol === 'file:')
+  document.body.insertAdjacentHTML('afterbegin',
+    `<div style="background:var(--ambS);border-bottom:1px solid var(--amb);color:var(--amb);
+      padding:9px 24px;font-size:12px;text-align:center;position:relative;z-index:200">
+      ⚠ Open via <a href="http://localhost:8080" style="color:var(--cyan);font-weight:700">localhost:8080</a>
+      — file:// mode won't reach the API
+    </div>`);
+
+let _hist = [], _lats = [], _checks = 0;
+
+/* ── Health check ── */
+async function checkHealth() {
+  try {
+    const r = await fetch(`${BASE}/actuator/health`);
+    const ok = r.ok;
+    document.getElementById('statusDot').className = 'sdot ' + (ok ? 'up' : 'down');
+    document.getElementById('statusText').textContent = ok ? 'Backend up' : 'Backend down';
+  } catch {
+    document.getElementById('statusDot').className = 'sdot down';
+    document.getElementById('statusText').textContent = 'Unreachable';
+  }
+}
+
+/* ── Username check ── */
+document.getElementById('checkInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkUsername() });
+
+async function checkUsername() {
+  const raw = document.getElementById('checkInput').value.trim();
+  if (!raw) return;
+  const btn = document.getElementById('checkBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+  _hideBanner('resultBanner');
+  flashBits(raw);
+  const t0 = performance.now();
+  try {
+    const r = await fetch(`${BASE}/api/v1/usernames/check?username=${encodeURIComponent(raw)}`);
+    const ms = +(performance.now() - t0).toFixed(1);
+    const d = await r.json();
+    if (!r.ok) {
+      _showBanner('resultBanner', 'warn', '⚠', d.message || 'Validation error', d.code || '');
+    } else {
+      const av = d.available;
+      _showBanner('resultBanner', av ? 'ok' : 'no', av ? '✓' : '✗',
+        av ? `"${d.username}" is available!` : `"${d.username}" is already taken`,
+        `${ms} ms · ${ms < 1 ? '⚡ Bloom fast path (no DB)' : ms < 5 ? '📦 Redis/DB path' : '🗄 DB path'}`
+      );
+      document.getElementById('lastLatency').textContent = ms + ' ms';
+      document.getElementById('normalizedUser').textContent = d.username;
+      _lats.push(ms); _updateLat();
+      _addHist(d.username, av, ms);
+      _checks++; document.getElementById('checkCount').textContent = _checks + ' checks';
+    }
+  } catch {
+    _showBanner('resultBanner', 'warn', '⚠', 'Request failed', 'Is the backend running at localhost:8080?');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Check';
+  }
+}
+
+/* ── Register ── */
+async function registerUser() {
+  const username = document.getElementById('regUsername').value.trim();
+  const email    = document.getElementById('regEmail').value.trim();
+  document.getElementById('regUsernameErr').style.display = 'none';
+  document.getElementById('regEmailErr').style.display = 'none';
+  _hideBanner('regResult');
+  if (!username) { _showErr('regUsernameErr', 'Username is required'); return }
+  const btn = event.target;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Creating…';
+  try {
+    const r = await fetch(`${BASE}/api/v1/users`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email: email || undefined })
+    });
+    const d = await r.json();
+    if (r.status === 201) {
+      _showBanner('regResult', 'ok', '✓', `User created! ID #${d.id}`, `@${d.username} · ${d.createdAt?.slice(0,19).replace('T',' ')}`);
+      document.getElementById('regUsername').value = '';
+      document.getElementById('regEmail').value = '';
+      flashBits(username);
+      _toast('User @' + d.username + ' created!', 'success'); loadMetrics();
+    } else if (r.status === 409) {
+      _showBanner('regResult', 'no', '✗', `"${username}" is already taken`, d.message || '');
+    } else if (r.status === 400) {
+      _showBanner('regResult', 'warn', '⚠', 'Validation error', d.message || '');
+    } else {
+      _showBanner('regResult', 'warn', '⚠', 'Error ' + r.status, d.message || '');
+    }
+  } catch {
+    _showBanner('regResult', 'warn', '⚠', 'Request failed', 'Is the backend running?');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Create Account';
+  }
+}
+
+/* ── Seed ── */
+async function seedData() {
+  const count = parseInt(document.getElementById('seedRange').value);
+  const btn = event.target;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Seeding…';
+  const prog = document.getElementById('seedProgress');
+  const fill = document.getElementById('seedProgressFill');
+  const txt  = document.getElementById('seedProgressText');
+  prog.classList.add('show'); fill.style.width = '10%'; txt.textContent = '0';
+  try {
+    const r = await fetch(`${BASE}/api/v1/seed/generate?count=${count}`, { method: 'POST' });
+    fill.style.width = '100%';
+    const d = await r.json();
+    txt.textContent = Number(d.created).toLocaleString();
+    _toast(`Seeded ${Number(d.created).toLocaleString()} users in ${d.elapsedMs}ms`, 'success');
+    setTimeout(loadMetrics, 500);
+  } catch {
+    _toast('Seed failed — is the backend running?', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Generate Users';
+    setTimeout(() => prog.classList.remove('show'), 3000);
+  }
+}
+
+/* ── Metrics ── */
+async function loadMetrics() {
+  async function fm(n) {
+    try {
+      const r = await fetch(`${BASE}/actuator/metrics/${n}`); if (!r.ok) return null;
+      const d = await r.json(); const m = d.measurements?.find(x => x.statistic === 'COUNT');
+      return m ? m.value : null;
+    } catch { return null }
+  }
+  const [neg, pos, fp, ch, cm] = await Promise.all([
+    fm('bloom_filter.negative'), fm('bloom_filter.positive'), fm('bloom_filter.false_positive'),
+    fm('bloom_filter.cache_hit'), fm('bloom_filter.cache_miss')
+  ]);
+  _animCount('mNegative', neg); _animCount('mPositive', pos); _animCount('mFalsePos', fp);
+  const hits = ch || 0, miss = cm || 0;
+  const ratio = (hits + miss) > 0 ? ((hits / (hits + miss)) * 100).toFixed(1) + '%' : '—';
+  _setText('mCacheHit', ratio);
+  _setText('mRefreshed', new Date().toLocaleTimeString());
+  try { const r = await fetch(`${BASE}/actuator/health`); if (r.ok) _setText('mStrategy', 'guava') } catch {}
+}
+
+function _animCount(id, val) {
+  if (val == null) { _setText(id, '—'); return }
+  const el = document.getElementById(id); if (!el) return;
+  const cur = parseFloat(el.textContent) || 0, diff = val - cur;
+  if (Math.abs(diff) < .5) { el.textContent = _fmt(val); return }
+  let s = null;
+  (function step(ts) {
+    if (!s) s = ts; const p = Math.min((ts - s) / 450, 1);
+    el.textContent = _fmt(cur + diff * p); if (p < 1) requestAnimationFrame(step);
+  })(performance.now());
+}
+
+/* ── Latency ── */
+function _updateLat() {
+  const ls = [..._lats].sort((a, b) => a - b);
+  const max = Math.max(...ls, 20);
+  _setLat('p50bar', 'p50val', _pct(ls, 50), max, 'var(--cyan)');
+  _setLat('p95bar', 'p95val', _pct(ls, 95), max, 'var(--amb)');
+  _setLat('p99bar', 'p99val', _pct(ls, 99), max, 'var(--red)');
+}
+function _pct(s, p) { if (!s.length) return null; return s[Math.max(0, Math.ceil(s.length * p / 100) - 1)] }
+function _setLat(bi, vi, v, max, c) {
+  if (v == null) return;
+  const bar = document.getElementById(bi);
+  bar.style.width = Math.min(100, (v / max) * 100) + '%'; bar.style.background = c;
+  document.getElementById(vi).textContent = v.toFixed(1) + ' ms';
+}
+
+/* ── History ── */
+function _addHist(username, av, ms) {
+  _hist.unshift({ username, av, ms }); if (_hist.length > 20) _hist.pop();
+  document.getElementById('historyList').innerHTML = _hist.map(h => `
+    <div class="hi" onclick="document.getElementById('checkInput').value='${h.username}'">
+      <span class="hn">${h.username}</span>
+      <span class="hs ${h.av ? 'hs-ok' : 'hs-no'}">${h.av ? 'available' : 'taken'}</span>
+      <span class="hms">${h.ms}ms</span>
+    </div>`).join('');
+}
+
+/* ── Helpers ── */
+function _showBanner(id, type, icon, title, sub) {
+  const el = document.getElementById(id);
+  el.className = 'rbanner ' + type;
+  el.innerHTML = `<div class="ri">${icon}</div><div><div class="rt">${title}</div><div class="rs">${sub}</div></div>`;
+}
+function _hideBanner(id) { const el = document.getElementById(id); el.className = 'rbanner'; el.style.display = '' }
+function _showErr(id, msg) { const el = document.getElementById(id); el.textContent = msg; el.style.display = 'block' }
+function _setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = v ?? '—' }
+function _fmt(n) {
+  if (n == null) return '—';
+  n = Math.round(n);
+  return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : n.toString();
+}
+let _tt;
+function _toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  clearTimeout(_tt); _tt = setTimeout(() => el.className = '', 3500);
+}
+
+/* ── Init ── */
+checkHealth(); loadMetrics();
+setInterval(checkHealth, 10000); setInterval(loadMetrics, 5000);
+</script>
+</body>
+</html>
