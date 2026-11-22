@@ -127,6 +127,8 @@ export function registerUser() {
 
   const res = http.post(`${BASE_URL}/api/v1/users`, payload, {
     headers: { "Content-Type": "application/json" },
+    // 409 is expected (concurrent race) — don't count it as a failed request
+    responseCallback: http.expectedStatuses(201, 409),
   });
 
   if (res.status === 409) {
