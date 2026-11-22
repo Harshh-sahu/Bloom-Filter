@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload unit test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-results
           path: target/surefire-reports/
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload integration test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-test-results
           path: target/failsafe-reports/
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload CVE report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cve-dependency-report-${{ needs.prepare.outputs.image_tag }}
           path: trivy-dep-report.txt
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload image CVE report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cve-image-report-${{ needs.prepare.outputs.image_tag }}
           path: trivy-image-report.txt
