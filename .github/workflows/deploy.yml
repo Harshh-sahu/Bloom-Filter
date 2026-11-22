@@ -1,7 +1,12 @@
-name: Deploy to AWS
+name: Deploy to Azure
 
 on:
-  workflow_dispatch:   # no inputs — select the tag from "Use workflow from" dropdown
+  workflow_dispatch:   # trigger from tag: Run workflow → Use workflow from → Tags
+
+env:
+  RESOURCE_GROUP: bloom-filter-rg
+  VM_NAME: bloom-filter-vm
+  LOCATION: eastus         # change to centralindia / southeastasia if preferred
 
 jobs:
   deploy:
@@ -10,40 +15,77 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Azure login
+        uses: azure/login@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy CloudFormation stack
+      - name: Build cloud-init startup script
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
-          aws cloudformation deploy \
-            --stack-name bloom-filter-stack \
-            --template-file infra/ec2-stack.yml \
-            --parameter-overrides \
-              ImageTag=${{ github.ref_name }} \
-              GhcrToken=${{ secrets.GHCR_PAT }} \
-              GhcrUsername=${{ github.repository_owner }} \
-            --no-fail-on-empty-changeset
+          GHCR_USER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="${{ github.ref_name }}"
 
-      - name: Get deployment info
+          # Write cloud-init — runs on the VM at first boot to install Docker and start the app
+          {
+            echo "#cloud-config"
+            echo "runcmd:"
+            echo "  - apt-get update -y && apt-get install -y docker.io curl"
+            echo "  - mkdir -p /usr/local/lib/docker/cli-plugins"
+            echo "  - curl -fsSL https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose"
+            echo "  - chmod +x /usr/local/lib/docker/cli-plugins/docker-compose"
+            echo "  - systemctl start docker && systemctl enable docker"
+            echo "  - echo '${GHCR_TOKEN}' | docker login ghcr.io -u ${GHCR_USER} --password-stdin"
+            echo "  - mkdir -p /app"
+            echo "  - curl -fsSL https://raw.githubusercontent.com/${GHCR_USER}/Bloom-Filter/${IMAGE_TAG}/docker-compose.prod.yml -o /app/docker-compose.yml"
+            echo "  - cd /app && IMAGE_TAG=${IMAGE_TAG} docker compose up -d"
+          } > /tmp/cloud-init.yml
+
+      - name: Create resource group
         run: |
-          APP_URL=$(aws cloudformation describe-stacks \
-            --stack-name bloom-filter-stack \
-            --query 'Stacks[0].Outputs[?OutputKey==`AppUrl`].OutputValue' \
-            --output text)
+          az group create \
+            --name ${{ env.RESOURCE_GROUP }} \
+            --location ${{ env.LOCATION }}
+
+      - name: Create VM
+        run: |
+          az vm create \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.VM_NAME }} \
+            --image Ubuntu2204 \
+            --size Standard_B2s \
+            --admin-username azureuser \
+            --generate-ssh-keys \
+            --custom-data /tmp/cloud-init.yml
+
+      - name: Open port 8080
+        run: |
+          az vm open-port \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.VM_NAME }} \
+            --port 8080
+
+      - name: Print deployment info
+        run: |
+          PUBLIC_IP=$(az vm show \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.VM_NAME }} \
+            --show-details \
+            --query publicIps \
+            --output tsv)
 
           cat >> $GITHUB_STEP_SUMMARY << EOF
-          ## ✅ Deployed
+          ## ✅ Deployed to Azure
 
-          | Field        | Value |
-          |--------------|-------|
-          | Git tag      | \`${{ github.ref_name }}\` |
-          | Deployed by  | \`${{ github.actor }}\` |
-          | App URL      | ${APP_URL} |
+          | Field          | Value |
+          |----------------|-------|
+          | Git tag        | \`${{ github.ref_name }}\` |
+          | Deployed by    | \`${{ github.actor }}\` |
+          | App URL        | http://${PUBLIC_IP}:8080 |
+          | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
+          | VM size        | Standard_B2s (2 vCPU / 4 GB) |
 
-          > ⏳ App takes ~60s to start after EC2 boots.
-          > 💸 Run **Destroy AWS** when done to avoid charges.
+          > ⏳ App takes ~90s to start (VM boot + Docker + container pull).
+          > 💸 Run **Destroy Azure** workflow when done — deletes everything.
           EOF

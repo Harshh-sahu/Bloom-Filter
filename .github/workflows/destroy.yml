@@ -1,41 +1,47 @@
-name: Destroy AWS
+name: Destroy Azure
 
 on:
   workflow_dispatch:
+
+env:
+  RESOURCE_GROUP: bloom-filter-rg
 
 jobs:
   destroy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Azure login
+        uses: azure/login@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Check stack exists
+      - name: Check resource group exists
         id: check
         run: |
-          STATUS=$(aws cloudformation describe-stacks \
-            --stack-name bloom-filter-stack \
-            --query 'Stacks[0].StackStatus' \
-            --output text 2>/dev/null || echo "DOES_NOT_EXIST")
-          echo "status=${STATUS}" >> $GITHUB_OUTPUT
-          echo "Stack status: ${STATUS}"
+          EXISTS=$(az group exists --name ${{ env.RESOURCE_GROUP }})
+          echo "exists=${EXISTS}" >> $GITHUB_OUTPUT
 
-      - name: Delete CloudFormation stack
-        if: steps.check.outputs.status != 'DOES_NOT_EXIST'
+      - name: Delete resource group
+        if: steps.check.outputs.exists == 'true'
         run: |
-          echo "Deleting bloom-filter-stack..."
-          aws cloudformation delete-stack --stack-name bloom-filter-stack
-          aws cloudformation wait stack-delete-complete --stack-name bloom-filter-stack
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  ✅ DESTROYED — EC2 instance terminated"
-          echo "  💰 No more AWS charges for this deployment"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Deleting ${{ env.RESOURCE_GROUP }} — VM, disk, NIC, NSG, public IP all removed..."
+          az group delete \
+            --name ${{ env.RESOURCE_GROUP }} \
+            --yes
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## ✅ Azure resources destroyed
+
+          | Field          | Value |
+          |----------------|-------|
+          | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
+          | Deleted by     | \`${{ github.actor }}\` |
+
+          All Azure resources deleted — no more charges.
+          EOF
 
       - name: Nothing to destroy
-        if: steps.check.outputs.status == 'DOES_NOT_EXIST'
-        run: echo "Stack bloom-filter-stack does not exist — nothing to delete."
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          echo "Resource group ${{ env.RESOURCE_GROUP }} not found — nothing to delete."
