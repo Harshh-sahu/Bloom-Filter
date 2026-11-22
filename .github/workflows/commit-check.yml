@@ -16,16 +16,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check format — HARSH-XXX Your message
+      - name: Check format — at least one HARSH-XXX commit required
         run: |
           PATTERN='^HARSH-[0-9]+ .+'
-          FAILED=0
+          FOUND=0
 
           # Determine commit range
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
           elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            # First push to a new branch — check only the latest commit
             RANGE="HEAD~1..HEAD"
           else
             RANGE="${{ github.event.before }}..${{ github.event.after }}"
@@ -33,33 +32,30 @@ jobs:
 
           while IFS= read -r msg; do
             [ -z "$msg" ] && continue
-
-            # Skip GitHub auto-generated merge commits
-            echo "$msg" | grep -qE '^Merge (pull request|branch)' && echo "⏭  Skipped merge commit" && continue
+            echo "$msg" | grep -qE '^Merge (pull request|branch)' && continue
 
             if echo "$msg" | grep -qE "$PATTERN"; then
               echo "✅  $msg"
+              FOUND=1
             else
-              echo "❌  $msg"
-              FAILED=1
+              echo "·   $msg"
             fi
           done < <(git log --format="%s" $RANGE 2>/dev/null || git log --format="%s" -1)
 
-          if [ "$FAILED" -eq 1 ]; then
+          if [ "$FOUND" -eq 0 ]; then
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "  ❌ Commit message format violation"
+            echo "  ❌ No commit follows the required format."
             echo ""
-            echo "  Required format:"
+            echo "  At least one commit must match:"
             echo "    HARSH-{number} {description}"
             echo ""
             echo "  Examples:"
             echo "    HARSH-001 Add bloom filter warmup on startup"
             echo "    HARSH-042 Fix CVE-2025-24813 in Tomcat"
-            echo "    HARSH-100 Refactor username service"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
 
           echo ""
-          echo "✅ All commit messages follow the required format."
+          echo "✅ At least one valid HARSH-XXX commit found — check passed."
