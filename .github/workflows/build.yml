@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: ['**']   # every push on every branch
+  workflow_dispatch:   # also triggerable manually from the Actions tab
 
 jobs:
   build:
