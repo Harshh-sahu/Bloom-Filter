@@ -20,6 +20,11 @@ import http from "k6/http";
 import { check, sleep, group } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
 
+// ─── Config (must be before options) ─────────────────────────────────────────
+const BASE_URL = __ENV.BASE_URL    || "http://localhost:8080";
+const VUS      = parseInt(__ENV.K6_VUS      || "100");
+const DURATION = __ENV.K6_DURATION          || "30s";
+
 // ─── Custom Metrics ──────────────────────────────────────────────────────────
 const bloomNegativeLatency = new Trend("bloom_negative_latency_ms");
 const bloomPositiveLatency = new Trend("bloom_positive_latency_ms");
@@ -66,10 +71,6 @@ export const options = {
     error_rate:                   ["rate<0.01"],
   },
 };
-
-const BASE_URL  = __ENV.BASE_URL   || "http://localhost:8080";
-const VUS       = parseInt(__ENV.K6_VUS      || "100");
-const DURATION  = __ENV.K6_DURATION          || "30s";
 
 // ─── Scenario A: Check a username that's NOT in the filter ───────────────────
 export function checkNewUsername() {
