@@ -1,21 +1,9 @@
 name: Load Test
 
 on:
-  # Run manually from the Actions tab
-  workflow_dispatch:
-    inputs:
-      vus:
-        description: 'Number of virtual users'
-        default: '100'
-        required: false
-      duration:
-        description: 'Test duration (e.g. 30s, 2m)'
-        default: '30s'
-        required: false
-
-  # Or run every night at midnight
+  workflow_dispatch:   # run manually from Actions tab
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'   # nightly at midnight
 
 jobs:
   k6-load-test:
@@ -72,11 +60,7 @@ jobs:
         uses: grafana/setup-k6-action@v1
 
       - name: Run k6 load test
-        run: |
-          k6 run \
-            --vus ${{ github.event.inputs.vus || '100' }} \
-            --duration ${{ github.event.inputs.duration || '30s' }} \
-            load-test/k6-script.js
+        run: k6 run load-test/k6-script.js
 
       - name: Upload results
         if: always()
