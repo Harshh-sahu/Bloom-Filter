@@ -20,15 +20,8 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Build
-        run: mvn clean compile -q
-
-      - name: Run unit tests
-        run: mvn test -Dtest="!*IntegrationTest,!*IT" -q
-
-      - name: Run integration tests (Testcontainers)
-        run: mvn test -Dtest="*IntegrationTest,*IT" -q
-        # Testcontainers spins up real PostgreSQL + Redis automatically
+      - name: Build and test
+        run: mvn clean verify -q
 
       - name: Upload test results
         if: always()
