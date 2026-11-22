@@ -51,27 +51,17 @@ jobs:
         id: integration
         run: mvn verify -q -DskipUnitTests
 
-      # ── Stage 4 · OWASP dependency CVE scan ───────────────────────────────
-      - name: '[4/6] OWASP dependency check'
-        id: owasp
-        uses: dependency-check/Dependency-Check_Action@main
+      # ── Stage 4 · Trivy dependency scan (pom.xml + JARs → CVEs) ─────────────
+      - name: '[4/6] Trivy dependency CVE scan'
+        id: trivy_fs
+        uses: aquasecurity/trivy-action@master
         with:
-          project: bloom-filter
-          path: .
-          format: HTML
-          out: target/owasp-report
-          # Fail on CVSS >= 7 (HIGH + CRITICAL)
-          args: >
-            --failOnCVSS 7
-            --enableRetired
-            --suppression owasp-suppressions.xml
-
-      - name: Upload OWASP report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: owasp-report-${{ env.IMAGE_TAG }}
-          path: target/owasp-report/
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
       # ── Stage 5 · Docker build + Trivy image scan ─────────────────────────
       - name: Log in to GHCR
@@ -92,8 +82,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: '[5/6] Trivy image scan (CRITICAL + HIGH → fail)'
-        id: trivy
+      - name: '[5/6] Trivy image CVE scan'
+        id: trivy_image
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
@@ -120,12 +110,12 @@ jobs:
 
           | Stage | Result |
           |-------|--------|
-          | Compile               | $(passed '${{ steps.compile.outcome }}') |
-          | Unit tests            | $(passed '${{ steps.unit.outcome }}') |
-          | Integration tests     | $(passed '${{ steps.integration.outcome }}') |
-          | OWASP CVE scan        | $(passed '${{ steps.owasp.outcome }}') |
-          | Trivy image scan      | $(passed '${{ steps.trivy.outcome }}') |
-          | Push to GHCR          | $(passed '${{ steps.push.outcome }}') |
+          | Compile                       | $(passed '${{ steps.compile.outcome }}') |
+          | Unit tests                    | $(passed '${{ steps.unit.outcome }}') |
+          | Integration tests             | $(passed '${{ steps.integration.outcome }}') |
+          | Trivy — dependency CVE scan   | $(passed '${{ steps.trivy_fs.outcome }}') |
+          | Trivy — image CVE scan        | $(passed '${{ steps.trivy_image.outcome }}') |
+          | Push to GHCR                  | $(passed '${{ steps.push.outcome }}') |
 
           ### Image tags
           \`\`\`
