@@ -126,6 +126,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Populate ~/.m2 before Trivy runs — prevents Trivy from fetching
+      # dependencies itself and hitting Maven Central's rate limit (429).
+      - name: Resolve Maven dependencies
+        run: mvn dependency:resolve -q
+
       - name: Trivy dependency CVE scan
         uses: aquasecurity/trivy-action@master
         with:
