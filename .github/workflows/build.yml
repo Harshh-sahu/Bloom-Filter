@@ -9,7 +9,7 @@ jobs:
     name: Build & Quality Gate
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -110,13 +110,20 @@ jobs:
           name: cve-image-report-${{ env.IMAGE_TAG }}
           path: trivy-image-report.txt
 
-      # ── Stage 6 · Push — only reached if all 5 stages above passed ─────────
+      # ── Stage 6 · Push image + create Git tag ─────────────────────────────
       - name: '[6/6] Push to GHCR'
         id: push
         run: |
           docker push ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
           docker tag  ${{ env.IMAGE }}:${{ env.IMAGE_TAG }} ${{ env.IMAGE }}:latest
           docker push ${{ env.IMAGE }}:latest
+
+      - name: Create Git tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ env.IMAGE_TAG }}
+          git push origin ${{ env.IMAGE_TAG }}
 
       # ── Summary ────────────────────────────────────────────────────────────
       - name: Job summary
