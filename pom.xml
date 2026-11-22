@@ -30,8 +30,8 @@
 		<netty.version>4.1.137.Final</netty.version>
 		<!-- PostgreSQL JDBC: CVE-2025-49146, CVE-2026-42198, CVE-2026-54291 -->
 		<postgresql.version>42.7.12</postgresql.version>
-		<!-- Guava: CVE-2026-102554 -->
-		<guava.version>33.7.2</guava.version>
+		<!-- Guava: CVE-2026-102554 fix (33.7.2) not yet released on Maven Central -->
+		<guava.version>33.3.1-jre</guava.version>
 		<!-- NOTE: spring-webmvc CVE-2026-47884 requires Spring 7.x (Spring Boot 4.x)
 		          and cannot be fixed on Spring Boot 3.x — monitor for Spring Boot 4.x GA -->
 	</properties>
