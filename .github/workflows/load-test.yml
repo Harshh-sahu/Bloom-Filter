@@ -1,9 +1,9 @@
 name: Load Test
 
 on:
-  workflow_dispatch:   # run manually from Actions tab
+  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'   # nightly at midnight
+    - cron: '0 0 * * *'
 
 jobs:
   k6-load-test:
