@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### k6 output ###
+load-test/results.json
+results.json
+
+### Scratch ###
+docs/codemie/
