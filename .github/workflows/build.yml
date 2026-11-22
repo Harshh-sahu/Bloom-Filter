@@ -2,30 +2,30 @@ name: Build
 
 on:
   push:
-    tags:
-      - 'v*'          # triggers on v1.0.0, v1.2.3, etc.
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to build (e.g. v1.0.0)'
-        required: true
+    branches: ['**']   # every push on every branch
 
 jobs:
   build:
+    name: Build & Quality Gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      # ── Setup ──────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Resolve image tag
+      - name: Compute image tag
+        id: tag
         run: |
           OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          # On a tag push: github.ref_name = "v1.0.0"
-          # On manual dispatch: use the input
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          BRANCH=$(echo '${{ github.ref_name }}' | sed 's/[^a-zA-Z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
+          SHORT_SHA=$(echo '${{ github.sha }}' | cut -c1-7)
+          TAG="${BRANCH}-${SHORT_SHA}"
+          echo "image=ghcr.io/${OWNER}/bloom-filter" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}"                           >> $GITHUB_OUTPUT
           echo "IMAGE=ghcr.io/${OWNER}/bloom-filter" >> $GITHUB_ENV
           echo "IMAGE_TAG=${TAG}"                     >> $GITHUB_ENV
 
@@ -36,9 +36,44 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Build JAR
-        run: mvn package -DskipTests -q
+      # ── Stage 1 · Compile ──────────────────────────────────────────────────
+      - name: '[1/6] Compile'
+        id: compile
+        run: mvn compile -q
 
+      # ── Stage 2 · Unit tests ───────────────────────────────────────────────
+      - name: '[2/6] Unit tests'
+        id: unit
+        run: mvn test -q
+
+      # ── Stage 3 · Integration tests (Testcontainers — real Postgres + Redis)
+      - name: '[3/6] Integration tests'
+        id: integration
+        run: mvn verify -q -DskipUnitTests
+
+      # ── Stage 4 · OWASP dependency CVE scan ───────────────────────────────
+      - name: '[4/6] OWASP dependency check'
+        id: owasp
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: bloom-filter
+          path: .
+          format: HTML
+          out: target/owasp-report
+          # Fail on CVSS >= 7 (HIGH + CRITICAL)
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+            --suppression owasp-suppressions.xml
+
+      - name: Upload OWASP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-report-${{ env.IMAGE_TAG }}
+          path: target/owasp-report/
+
+      # ── Stage 5 · Docker build + Trivy image scan ─────────────────────────
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -46,31 +81,59 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      - name: '[5/6] Build Docker image (local — not pushed yet)'
+        id: docker_build
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
-            ${{ env.IMAGE }}:latest
+          push: false
+          load: true
+          tags: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Write job summary
+      - name: '[5/6] Trivy image scan (CRITICAL + HIGH → fail)'
+        id: trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      # ── Stage 6 · Push — only reached if all 5 stages above passed ─────────
+      - name: '[6/6] Push to GHCR'
+        id: push
         run: |
+          docker push ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+          docker tag  ${{ env.IMAGE }}:${{ env.IMAGE_TAG }} ${{ env.IMAGE }}:latest
+          docker push ${{ env.IMAGE }}:latest
+
+      # ── Summary ────────────────────────────────────────────────────────────
+      - name: Job summary
+        if: always()
+        run: |
+          passed() { [ "$1" = "success" ] && echo "✅ Pass" || echo "❌ Fail"; }
           cat >> $GITHUB_STEP_SUMMARY << EOF
-          ## ✅ Build complete — tag \`${{ env.IMAGE_TAG }}\`
+          ## Build \`${{ env.IMAGE_TAG }}\`
 
-          | Field   | Value |
-          |---------|-------|
-          | Tag     | \`${{ env.IMAGE_TAG }}\` |
-          | Image   | \`${{ env.IMAGE }}:${{ env.IMAGE_TAG }}\` |
-          | Commit  | \`${{ github.sha }}\` |
+          | Stage | Result |
+          |-------|--------|
+          | Compile               | $(passed '${{ steps.compile.outcome }}') |
+          | Unit tests            | $(passed '${{ steps.unit.outcome }}') |
+          | Integration tests     | $(passed '${{ steps.integration.outcome }}') |
+          | OWASP CVE scan        | $(passed '${{ steps.owasp.outcome }}') |
+          | Trivy image scan      | $(passed '${{ steps.trivy.outcome }}') |
+          | Push to GHCR          | $(passed '${{ steps.push.outcome }}') |
 
-          ### 👉 Deploy this build
-          **Actions → Deploy to AWS → Run workflow → tag:** \`${{ env.IMAGE_TAG }}\`
+          ### Image tags
+          \`\`\`
+          ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}   ← use this to deploy
+          ${{ env.IMAGE }}:latest
+          \`\`\`
 
-          ### 🗑 Remove from AWS when done
-          **Actions → Destroy AWS → Run workflow**
+          ### Deploy this build
+          **Actions → Deploy to AWS → Run workflow**
+          Tag: \`${{ env.IMAGE_TAG }}\`
           EOF

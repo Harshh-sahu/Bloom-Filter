@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Image tag to deploy (e.g. v1.0.0)'
+        description: 'Image tag to deploy — copy from Build job summary (e.g. main-a1b2c3d)'
         required: true
         type: string
 
