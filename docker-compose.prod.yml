@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  app:
+    image: ghcr.io/harshh-sahu/bloom-filter:${BUILD_NUMBER:-latest}
+    container_name: bloom_app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/bloomfilter
+      SPRING_DATASOURCE_USERNAME: bloomfilter
+      SPRING_DATASOURCE_PASSWORD: bloomfilter
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      BLOOM_FILTER_WARMUP_ON_STARTUP: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bloom_postgres
+    environment:
+      POSTGRES_DB: bloomfilter
+      POSTGRES_USER: bloomfilter
+      POSTGRES_PASSWORD: bloomfilter
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bloomfilter -d bloomfilter"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: bloom_redis
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save "" --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
