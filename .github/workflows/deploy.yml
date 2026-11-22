@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Image tag to deploy — copy from Build job summary (e.g. main-a1b2c3d)'
+        description: 'Git tag to deploy — pick from repo Tags (e.g. main-30b70b8)'
         required: true
         type: string
 
