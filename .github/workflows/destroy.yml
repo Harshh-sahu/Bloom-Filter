@@ -12,12 +12,16 @@ jobs:
 
     steps:
       - name: Azure login
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: |
-          az login --service-principal \
-            -u "${{ secrets.AZURE_CLIENT_ID }}" \
-            -p "${{ secrets.AZURE_CLIENT_SECRET }}" \
-            --tenant "${{ secrets.AZURE_TENANT_ID }}"
-          az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          CLIENT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r .clientId)
+          CLIENT_SECRET=$(echo "$AZURE_CREDENTIALS" | jq -r .clientSecret)
+          TENANT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r .tenantId)
+          SUB_ID=$(echo "$AZURE_CREDENTIALS"        | jq -r .subscriptionId)
+
+          az login --service-principal -u "$CLIENT_ID" -p "$CLIENT_SECRET" --tenant "$TENANT_ID"
+          az account set --subscription "$SUB_ID"
 
       - name: Check resource group exists
         id: check
