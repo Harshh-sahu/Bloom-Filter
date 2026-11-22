@@ -17,10 +17,10 @@
   --s2:    rgba(14,22,44,0.76);
   --b1:    rgba(45,85,180,0.14);
   --b2:    rgba(0,210,255,0.22);
-  --t:     #9ab4d4;
-  --th:    #d4e8ff;
-  --tm:    #4a6484;
-  --td:    #1e3050;
+  --t:     #b8d0ea;
+  --th:    #e4f0ff;
+  --tm:    #7898be;
+  --td:    #4a6888;
   --cyan:  #00d4ff;
   --cg:    rgba(0,212,255,0.32);
   --cs:    rgba(0,212,255,0.08);
@@ -43,7 +43,7 @@
     --bg:#f1f5ff; --bg2:#e6eeff;
     --s1:rgba(255,255,255,0.92); --s2:rgba(238,245,255,0.85);
     --b1:rgba(90,130,230,0.14);  --b2:rgba(0,112,200,0.26);
-    --t:#374e72; --th:#0d1c38; --tm:#6880a4; --td:#a8bcd4;
+    --t:#3a5278; --th:#0a1830; --tm:#587098; --td:#90a8c4;
     --cyan:#0280c4; --cg:rgba(2,128,196,0.22); --cs:rgba(2,128,196,0.07);
     --vio:#6d28d9;  --vg:rgba(109,40,217,0.17); --vs:rgba(109,40,217,0.06);
     --grn:#059669;  --grnS:rgba(5,150,105,0.09);
@@ -57,7 +57,7 @@
   --bg:#f1f5ff; --bg2:#e6eeff;
   --s1:rgba(255,255,255,0.92); --s2:rgba(238,245,255,0.85);
   --b1:rgba(90,130,230,0.14);  --b2:rgba(0,112,200,0.26);
-  --t:#374e72; --th:#0d1c38; --tm:#6880a4; --td:#a8bcd4;
+  --t:#3a5278; --th:#0a1830; --tm:#587098; --td:#90a8c4;
   --cyan:#0280c4; --cg:rgba(2,128,196,0.22); --cs:rgba(2,128,196,0.07);
   --vio:#6d28d9;  --vg:rgba(109,40,217,0.17); --vs:rgba(109,40,217,0.06);
   --grn:#059669;  --grnS:rgba(5,150,105,0.09);
@@ -505,6 +505,50 @@ input[type="range"] {
   vertical-align:middle;
 }
 @keyframes spin { to { transform:rotate(360deg) } }
+
+/* ── Card entrance (staggered) ── */
+@keyframes cardIn {
+  from { opacity:0; transform:translateY(22px) scale(.97) }
+  to   { opacity:1; transform:translateY(0) scale(1) }
+}
+#card0 { animation: cardIn .5s cubic-bezier(.34,1.1,.64,1) .05s both }
+#card1 { animation: cardIn .5s cubic-bezier(.34,1.1,.64,1) .18s both }
+#card2 { animation: cardIn .5s cubic-bezier(.34,1.1,.64,1) .10s both }
+#card3 { animation: cardIn .5s cubic-bezier(.34,1.1,.64,1) .24s both }
+
+/* ── Scan line across bit array ── */
+.bit-array::after {
+  content:'';
+  position:absolute; top:0; bottom:0; width:2px;
+  background:linear-gradient(to bottom, transparent, var(--cyan), transparent);
+  box-shadow: 0 0 8px var(--cg);
+  animation: scanLine 3.5s ease-in-out infinite;
+  pointer-events:none; opacity:.7;
+}
+@keyframes scanLine {
+  0%   { left:-2px; opacity:0 }
+  8%   { opacity:.7 }
+  92%  { opacity:.7 }
+  100% { left:calc(100% + 2px); opacity:0 }
+}
+
+/* ── Button ripple ── */
+.btn-ripple {
+  position:absolute; border-radius:50%;
+  background:rgba(255,255,255,.25);
+  transform:scale(0); animation:ripple .55s linear;
+  pointer-events:none;
+}
+@keyframes ripple { to { transform:scale(5); opacity:0 } }
+
+/* ── Metric tile pulse on update ── */
+@keyframes metricPulse {
+  0%   { transform:scale(1) }
+  40%  { transform:scale(1.08) }
+  100% { transform:scale(1) }
+}
+.mv.updated { animation: metricPulse .35s ease }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.01ms!important; transition-duration:.01ms!important }
 }
@@ -910,6 +954,10 @@ function _animCount(id, val) {
   const el = document.getElementById(id); if (!el) return;
   const cur = parseFloat(el.textContent) || 0, diff = val - cur;
   if (Math.abs(diff) < .5) { el.textContent = _fmt(val); return }
+  el.classList.remove('updated');
+  void el.offsetWidth; // force reflow to restart animation
+  el.classList.add('updated');
+  setTimeout(() => el.classList.remove('updated'), 400);
   let s = null;
   (function step(ts) {
     if (!s) s = ts; const p = Math.min((ts - s) / 450, 1);
@@ -964,6 +1012,19 @@ function _toast(msg, type = 'success') {
   el.textContent = msg; el.className = 'show ' + type;
   clearTimeout(_tt); _tt = setTimeout(() => el.className = '', 3500);
 }
+
+/* ── Button ripple ── */
+document.querySelectorAll('.btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    const r = document.createElement('span');
+    r.className = 'btn-ripple';
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    r.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX-rect.left-size/2}px;top:${e.clientY-rect.top-size/2}px`;
+    btn.appendChild(r);
+    r.addEventListener('animationend', () => r.remove());
+  });
+});
 
 /* ── Init ── */
 checkHealth(); loadMetrics();
