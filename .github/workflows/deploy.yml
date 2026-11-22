@@ -16,26 +16,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Azure login
-        env:
-          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: |
-          echo "=== DEBUG: raw secret length: ${#AZURE_CREDENTIALS} ==="
-          echo "=== DEBUG: first 10 chars: ${AZURE_CREDENTIALS:0:10} ==="
-
-          # strip Windows CR if pasted on Windows
-          CREDS=$(echo "$AZURE_CREDENTIALS" | tr -d '\r')
-
-          CLIENT_ID=$(echo "$CREDS"     | jq -r '.clientId // .appId // empty')
-          CLIENT_SECRET=$(echo "$CREDS" | jq -r '.clientSecret // .password // empty')
-          TENANT_ID=$(echo "$CREDS"     | jq -r '.tenantId // .tenant // empty')
-          SUB_ID=$(echo "$CREDS"        | jq -r '.subscriptionId // empty')
-
-          echo "client_id length:   ${#CLIENT_ID}"
-          echo "tenant_id length:   ${#TENANT_ID}"
-          echo "sub_id length:      ${#SUB_ID}"
-
-          az login --service-principal -u "$CLIENT_ID" -p "$CLIENT_SECRET" --tenant "$TENANT_ID"
-          az account set --subscription "$SUB_ID"
+          az login --service-principal \
+            -u "${{ secrets.AZ_CLIENT_ID }}" \
+            -p "${{ secrets.AZ_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZ_TENANT_ID }}"
+          az account set --subscription "${{ secrets.AZ_SUBSCRIPTION_ID }}"
 
       - name: Build cloud-init startup script
         env:
