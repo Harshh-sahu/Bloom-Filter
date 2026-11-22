@@ -2,6 +2,15 @@ name: Load Test
 
 on:
   workflow_dispatch:
+    inputs:
+      vus:
+        description: 'Virtual users'
+        default: '100'
+        required: false
+      duration:
+        description: 'Duration (e.g. 30s, 2m)'
+        default: '30s'
+        required: false
   schedule:
     - cron: '0 0 * * *'
 
@@ -60,6 +69,9 @@ jobs:
         uses: grafana/setup-k6-action@v1
 
       - name: Run k6 load test
+        env:
+          K6_VUS: ${{ github.event.inputs.vus || '100' }}
+          K6_DURATION: ${{ github.event.inputs.duration || '30s' }}
         run: k6 run load-test/k6-script.js
 
       - name: Upload results

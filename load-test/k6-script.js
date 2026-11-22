@@ -36,15 +36,15 @@ export const options = {
     // Scenario A: Bloom filter negative path (fast path, most traffic)
     bloom_check_new: {
       executor: "constant-vus",
-      vus: 80,
-      duration: "30s",
+      vus: Math.floor(VUS * 0.8),
+      duration: DURATION,
       exec: "checkNewUsername",
     },
     // Scenario B: Bloom filter positive path (registered usernames)
     bloom_check_existing: {
       executor: "constant-vus",
-      vus: 20,
-      duration: "30s",
+      vus: Math.floor(VUS * 0.2),
+      duration: DURATION,
       exec: "checkExistingUsername",
       startTime: "5s",
     },
@@ -67,7 +67,9 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8080";
+const BASE_URL  = __ENV.BASE_URL   || "http://localhost:8080";
+const VUS       = parseInt(__ENV.K6_VUS      || "100");
+const DURATION  = __ENV.K6_DURATION          || "30s";
 
 // ─── Scenario A: Check a username that's NOT in the filter ───────────────────
 export function checkNewUsername() {
