@@ -1,12 +1,7 @@
 name: Deploy to AWS
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Git tag to deploy — pick from repo Tags (e.g. main-30b70b8)'
-        required: true
-        type: string
+  workflow_dispatch:   # no inputs — select the tag from "Use workflow from" dropdown
 
 jobs:
   deploy:
@@ -28,7 +23,7 @@ jobs:
             --stack-name bloom-filter-stack \
             --template-file infra/ec2-stack.yml \
             --parameter-overrides \
-              ImageTag=${{ github.event.inputs.tag }} \
+              ImageTag=${{ github.ref_name }} \
               GhcrToken=${{ secrets.GHCR_PAT }} \
               GhcrUsername=${{ github.repository_owner }} \
             --no-fail-on-empty-changeset
@@ -41,14 +36,14 @@ jobs:
             --output text)
 
           cat >> $GITHUB_STEP_SUMMARY << EOF
-          ## ✅ Deployed — tag \`${{ github.event.inputs.tag }}\`
+          ## ✅ Deployed
 
-          | Field       | Value |
-          |-------------|-------|
-          | Tag         | \`${{ github.event.inputs.tag }}\` |
-          | App URL     | ${APP_URL} |
+          | Field        | Value |
+          |--------------|-------|
+          | Git tag      | \`${{ github.ref_name }}\` |
+          | Deployed by  | \`${{ github.actor }}\` |
+          | App URL      | ${APP_URL} |
 
           > ⏳ App takes ~60s to start after EC2 boots.
-
-          > 💸 Run **Destroy AWS** workflow when you are done to avoid charges.
+          > 💸 Run **Destroy AWS** when done to avoid charges.
           EOF
