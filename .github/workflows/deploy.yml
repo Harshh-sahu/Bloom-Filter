@@ -1,16 +1,48 @@
 name: Deploy to Azure
 
+# ── Job graph ─────────────────────────────────────────────────────────────────
+#
+#   🔐 Authenticate ──► 🚀 Deploy / Update ──► 📋 Report
+#
+# ──────────────────────────────────────────────────────────────────────────────
+
 on:
-  workflow_dispatch:   # trigger from tag: Run workflow → Use workflow from → Tags
+  workflow_dispatch:
 
 env:
   RESOURCE_GROUP: bloom-filter-rg
-  VM_NAME: bloom-filter-vm
-  LOCATION: eastus         # change to centralindia / southeastasia if preferred
+  VM_NAME:        bloom-filter-vm
+  LOCATION:       eastus
 
 jobs:
-  deploy:
+
+  # ── 1. Azure login + validate secrets are present ───────────────────────────
+  authenticate:
+    name: "🔐 Authenticate"
     runs-on: ubuntu-latest
+    outputs:
+      logged_in: ${{ steps.login.outputs.logged_in }}
+
+    steps:
+      - name: Azure login
+        id: login
+        run: |
+          az login --service-principal \
+            -u "${{ secrets.AZ_CLIENT_ID }}" \
+            -p "${{ secrets.AZ_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZ_TENANT_ID }}"
+          az account set --subscription "${{ secrets.AZ_SUBSCRIPTION_ID }}"
+          echo "logged_in=true" >> $GITHUB_OUTPUT
+          echo "✅ Authenticated with Azure"
+
+  # ── 2. Provision VM (first run) or rolling update (subsequent runs) ──────────
+  deploy:
+    name: "🚀 Deploy / Update"
+    runs-on: ubuntu-latest
+    needs: authenticate
+    outputs:
+      public_ip:  ${{ steps.get_ip.outputs.ip }}
+      deploy_mode: ${{ steps.mode.outputs.mode }}
 
     steps:
       - uses: actions/checkout@v4
@@ -23,14 +55,20 @@ jobs:
             --tenant "${{ secrets.AZ_TENANT_ID }}"
           az account set --subscription "${{ secrets.AZ_SUBSCRIPTION_ID }}"
 
-      - name: Build cloud-init startup script
+      - name: Check if VM exists
+        id: mode
+        run: |
+          EXISTS=$(az group exists --name ${{ env.RESOURCE_GROUP }})
+          echo "mode=$( [ "$EXISTS" = "true" ] && echo 'update' || echo 'create' )" >> $GITHUB_OUTPUT
+          echo "Deploy mode: $( [ "$EXISTS" = "true" ] && echo 'in-place update' || echo 'fresh provision' )"
+
+      - name: Build cloud-init script
+        if: steps.mode.outputs.mode == 'create'
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
           GHCR_USER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           IMAGE_TAG="${{ github.ref_name }}"
-
-          # Write cloud-init — runs on the VM at first boot to install Docker and start the app
           {
             echo "#cloud-config"
             echo "runcmd:"
@@ -45,74 +83,74 @@ jobs:
             echo "  - cd /app && IMAGE_TAG=${IMAGE_TAG} docker compose up -d"
           } > /tmp/cloud-init.yml
 
-      - name: First deploy or in-place update
+      - name: Provision fresh VM
+        if: steps.mode.outputs.mode == 'create'
         run: |
-          VM_EXISTS=$(az group exists --name ${{ env.RESOURCE_GROUP }})
-
-          if [ "$VM_EXISTS" = "true" ]; then
-            echo "VM already running — doing in-place update..."
-
-            az vm run-command invoke \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --name ${{ env.VM_NAME }} \
-              --command-id RunShellScript \
-              --scripts "
-                cd /app
-                IMAGE_TAG=${{ github.ref_name }} docker compose pull app
-                IMAGE_TAG=${{ github.ref_name }} docker compose up -d app
-                echo 'Update complete: '${{ github.ref_name }}
-              "
-
-            echo "IN_PLACE=true" >> $GITHUB_ENV
-          else
-            echo "No existing deployment — creating fresh VM..."
-
-            az group create \
-              --name ${{ env.RESOURCE_GROUP }} \
-              --location ${{ env.LOCATION }}
-
-            az vm create \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --name ${{ env.VM_NAME }} \
-              --image Ubuntu2204 \
-              --size Standard_B2s \
-              --admin-username azureuser \
-              --generate-ssh-keys \
-              --custom-data /tmp/cloud-init.yml
-
-            az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 8080 --priority 1001
-            az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 3000 --priority 1002
-            az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 9090 --priority 1003
-
-            echo "IN_PLACE=false" >> $GITHUB_ENV
-          fi
-
-      - name: Print deployment info
-        run: |
-          PUBLIC_IP=$(az vm show \
+          az group create --name ${{ env.RESOURCE_GROUP }} --location ${{ env.LOCATION }}
+          az vm create \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --name ${{ env.VM_NAME }} \
-            --show-details \
-            --query publicIps \
-            --output tsv)
+            --image Ubuntu2204 \
+            --size Standard_B2s \
+            --admin-username azureuser \
+            --generate-ssh-keys \
+            --custom-data /tmp/cloud-init.yml
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 8080 --priority 1001
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 3000 --priority 1002
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 9090 --priority 1003
 
-          MODE=$([[ "$IN_PLACE" == "true" ]] && echo "🔄 In-place update (~30s)" || echo "🆕 Fresh VM (~90s)")
+      - name: In-place rolling update
+        if: steps.mode.outputs.mode == 'update'
+        run: |
+          az vm run-command invoke \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.VM_NAME }} \
+            --command-id RunShellScript \
+            --scripts "
+              cd /app
+              IMAGE_TAG=${{ github.ref_name }} docker compose pull app
+              IMAGE_TAG=${{ github.ref_name }} docker compose up -d app
+              echo 'Update complete: ${{ github.ref_name }}'
+            "
+
+      - name: Get public IP
+        id: get_ip
+        run: |
+          IP=$(az vm show \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name ${{ env.VM_NAME }} \
+            --show-details --query publicIps --output tsv)
+          echo "ip=${IP}" >> $GITHUB_OUTPUT
+
+  # ── 3. Print deployment summary ─────────────────────────────────────────────
+  report:
+    name: "📋 Report"
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: always()
+
+    steps:
+      - name: Deployment summary
+        run: |
+          IP="${{ needs.deploy.outputs.public_ip }}"
+          MODE="${{ needs.deploy.outputs.deploy_mode }}"
+          LABEL=$( [ "$MODE" = "update" ] && echo "🔄 In-place update (~30s)" || echo "🆕 Fresh VM (~90s)" )
 
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## ✅ Deployed to Azure
 
           | Service    | URL |
           |------------|-----|
-          | App        | http://${PUBLIC_IP}:8080 |
-          | Grafana    | http://${PUBLIC_IP}:3000 |
-          | Prometheus | http://${PUBLIC_IP}:9090 |
+          | App        | http://${IP}:8080 |
+          | Grafana    | http://${IP}:3000 |
+          | Prometheus | http://${IP}:9090 |
 
           | Field          | Value |
           |----------------|-------|
           | Git tag        | \`${{ github.ref_name }}\` |
           | Deployed by    | \`${{ github.actor }}\` |
-          | Deploy mode    | ${MODE} |
+          | Deploy mode    | ${LABEL} |
           | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
 
-          > 💸 Run **Destroy Azure** workflow when done — deletes everything.
+          > 💸 Run **Destroy Azure** workflow when done to avoid charges.
           EOF

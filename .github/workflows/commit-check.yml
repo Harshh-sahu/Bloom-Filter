@@ -1,28 +1,36 @@
 name: Commit Check
 
+# ── Job graph ─────────────────────────────────────────────────────────────────
+#
+#   🔍 Determine Range ──► ✅ Validate Format
+#
+# ──────────────────────────────────────────────────────────────────────────────
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
     branches: ['**']
+  workflow_dispatch:
 
 jobs:
-  validate-commits:
-    name: Validate commit messages
+
+  # ── 1. Work out which commits to check ──────────────────────────────────────
+  determine-range:
+    name: "🔍 Determine Range"
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
+    outputs:
+      range: ${{ steps.range.outputs.range }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check format — at least one HARSH-XXX commit required
+      - name: Compute commit range
+        id: range
         run: |
-          PATTERN='^HARSH-[0-9]+ .+'
-          FOUND=0
-
-          # Determine commit range
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             RANGE="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
           elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
@@ -30,6 +38,25 @@ jobs:
           else
             RANGE="${{ github.event.before }}..${{ github.event.after }}"
           fi
+          echo "range=${RANGE}" >> $GITHUB_OUTPUT
+          echo "Commit range: ${RANGE}"
+
+  # ── 2. Validate that at least one commit matches HARSH-XXX ──────────────────
+  validate-format:
+    name: "✅ Validate Format"
+    runs-on: ubuntu-latest
+    needs: determine-range
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check HARSH-XXX format
+        run: |
+          PATTERN='^HARSH-[0-9]+ .+'
+          RANGE="${{ needs.determine-range.outputs.range }}"
+          FOUND=0
 
           while IFS= read -r msg; do
             [ -z "$msg" ] && continue
