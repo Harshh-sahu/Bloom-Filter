@@ -1,0 +1,4 @@
+# CVE-2026-102554 — Guava DoS via deserialization
+# Fix version 33.7.2 is not yet published to Maven Central.
+# Re-check: https://github.com/google/guava/releases
+CVE-2026-102554
