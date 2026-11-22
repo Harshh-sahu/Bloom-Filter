@@ -1,5 +1,11 @@
 name: Destroy Azure
 
+# ── Job graph ─────────────────────────────────────────────────────────────────
+#
+#   🔍 Pre-flight Check ──► 💥 Destroy Resources ──► 📋 Report
+#
+# ──────────────────────────────────────────────────────────────────────────────
+
 on:
   workflow_dispatch:
 
@@ -7,8 +13,13 @@ env:
   RESOURCE_GROUP: bloom-filter-rg
 
 jobs:
-  destroy:
+
+  # ── 1. Login + check if anything exists to delete ───────────────────────────
+  preflight:
+    name: "🔍 Pre-flight Check"
     runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
 
     steps:
       - name: Azure login
@@ -19,21 +30,53 @@ jobs:
             --tenant "${{ secrets.AZ_TENANT_ID }}"
           az account set --subscription "${{ secrets.AZ_SUBSCRIPTION_ID }}"
 
-      - name: Check resource group exists
+      - name: Check resource group
         id: check
         run: |
           EXISTS=$(az group exists --name ${{ env.RESOURCE_GROUP }})
           echo "exists=${EXISTS}" >> $GITHUB_OUTPUT
+          if [ "$EXISTS" = "true" ]; then
+            echo "✅ Resource group '${{ env.RESOURCE_GROUP }}' found — will destroy."
+          else
+            echo "ℹ️ Resource group '${{ env.RESOURCE_GROUP }}' not found — nothing to delete."
+          fi
+
+  # ── 2. Delete the entire resource group (VM, disk, NIC, NSG, public IP) ─────
+  destroy:
+    name: "💥 Destroy Resources"
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.exists == 'true'
+
+    steps:
+      - name: Azure login
+        run: |
+          az login --service-principal \
+            -u "${{ secrets.AZ_CLIENT_ID }}" \
+            -p "${{ secrets.AZ_CLIENT_SECRET }}" \
+            --tenant "${{ secrets.AZ_TENANT_ID }}"
+          az account set --subscription "${{ secrets.AZ_SUBSCRIPTION_ID }}"
 
       - name: Delete resource group
-        if: steps.check.outputs.exists == 'true'
         run: |
-          echo "Deleting ${{ env.RESOURCE_GROUP }} — VM, disk, NIC, NSG, public IP all removed..."
+          echo "Deleting ${{ env.RESOURCE_GROUP }} — all resources will be removed..."
           az group delete \
             --name ${{ env.RESOURCE_GROUP }} \
             --yes
+          echo "✅ Deleted successfully."
 
-          cat >> $GITHUB_STEP_SUMMARY << EOF
+  # ── 3. Print outcome ─────────────────────────────────────────────────────────
+  report:
+    name: "📋 Report"
+    runs-on: ubuntu-latest
+    needs: [preflight, destroy]
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          if [ "${{ needs.preflight.outputs.exists }}" = "true" ]; then
+            cat >> $GITHUB_STEP_SUMMARY << EOF
           ## ✅ Azure resources destroyed
 
           | Field          | Value |
@@ -41,10 +84,12 @@ jobs:
           | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
           | Deleted by     | \`${{ github.actor }}\` |
 
-          All Azure resources deleted — no more charges.
+          All resources deleted — no further charges.
           EOF
+          else
+            cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## ℹ️ Nothing to destroy
 
-      - name: Nothing to destroy
-        if: steps.check.outputs.exists == 'false'
-        run: |
-          echo "Resource group ${{ env.RESOURCE_GROUP }} not found — nothing to delete."
+          Resource group \`${{ env.RESOURCE_GROUP }}\` did not exist.
+          EOF
+          fi
