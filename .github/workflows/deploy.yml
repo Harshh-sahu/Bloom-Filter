@@ -19,11 +19,16 @@ jobs:
         env:
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: |
-          # Support both az ad sp output format (appId/tenant) and AZURE_CREDENTIALS format (clientId/tenantId)
-          CLIENT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r '.clientId // .appId')
-          CLIENT_SECRET=$(echo "$AZURE_CREDENTIALS" | jq -r '.clientSecret // .password')
-          TENANT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r '.tenantId // .tenant')
-          SUB_ID=$(echo "$AZURE_CREDENTIALS"        | jq -r '.subscriptionId')
+          echo "=== DEBUG: raw secret length: ${#AZURE_CREDENTIALS} ==="
+          echo "=== DEBUG: first 10 chars: ${AZURE_CREDENTIALS:0:10} ==="
+
+          # strip Windows CR if pasted on Windows
+          CREDS=$(echo "$AZURE_CREDENTIALS" | tr -d '\r')
+
+          CLIENT_ID=$(echo "$CREDS"     | jq -r '.clientId // .appId // empty')
+          CLIENT_SECRET=$(echo "$CREDS" | jq -r '.clientSecret // .password // empty')
+          TENANT_ID=$(echo "$CREDS"     | jq -r '.tenantId // .tenant // empty')
+          SUB_ID=$(echo "$CREDS"        | jq -r '.subscriptionId // empty')
 
           echo "client_id length:   ${#CLIENT_ID}"
           echo "tenant_id length:   ${#TENANT_ID}"
