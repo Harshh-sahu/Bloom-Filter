@@ -19,10 +19,15 @@ jobs:
         env:
           AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: |
-          CLIENT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r .clientId)
-          CLIENT_SECRET=$(echo "$AZURE_CREDENTIALS" | jq -r .clientSecret)
-          TENANT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r .tenantId)
-          SUB_ID=$(echo "$AZURE_CREDENTIALS"        | jq -r .subscriptionId)
+          # Support both az ad sp output format (appId/tenant) and AZURE_CREDENTIALS format (clientId/tenantId)
+          CLIENT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r '.clientId // .appId')
+          CLIENT_SECRET=$(echo "$AZURE_CREDENTIALS" | jq -r '.clientSecret // .password')
+          TENANT_ID=$(echo "$AZURE_CREDENTIALS"     | jq -r '.tenantId // .tenant')
+          SUB_ID=$(echo "$AZURE_CREDENTIALS"        | jq -r '.subscriptionId')
+
+          echo "client_id length:   ${#CLIENT_ID}"
+          echo "tenant_id length:   ${#TENANT_ID}"
+          echo "sub_id length:      ${#SUB_ID}"
 
           az login --service-principal -u "$CLIENT_ID" -p "$CLIENT_SECRET" --tenant "$TENANT_ID"
           az account set --subscription "$SUB_ID"
