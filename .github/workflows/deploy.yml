@@ -3,8 +3,8 @@ name: Deploy to AWS
 on:
   workflow_dispatch:
     inputs:
-      build_number:
-        description: 'Build number to deploy  (copy from Build workflow output)'
+      tag:
+        description: 'Image tag to deploy (e.g. v1.0.0)'
         required: true
         type: string
 
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -28,7 +28,7 @@ jobs:
             --stack-name bloom-filter-stack \
             --template-file infra/ec2-stack.yml \
             --parameter-overrides \
-              BuildNumber=${{ github.event.inputs.build_number }} \
+              ImageTag=${{ github.event.inputs.tag }} \
               GhcrToken=${{ secrets.GHCR_PAT }} \
               GhcrUsername=${{ github.repository_owner }} \
             --no-fail-on-empty-changeset
@@ -40,20 +40,15 @@ jobs:
             --query 'Stacks[0].Outputs[?OutputKey==`AppUrl`].OutputValue' \
             --output text)
 
-          PUBLIC_IP=$(aws cloudformation describe-stacks \
-            --stack-name bloom-filter-stack \
-            --query 'Stacks[0].Outputs[?OutputKey==`PublicIp`].OutputValue' \
-            --output text)
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## ✅ Deployed — tag \`${{ github.event.inputs.tag }}\`
 
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "  ✅ DEPLOYED TO AWS"
-          echo ""
-          echo "  BUILD NUMBER : ${{ github.event.inputs.build_number }}"
-          echo "  APP URL      : ${APP_URL}"
-          echo "  PUBLIC IP    : ${PUBLIC_IP}"
-          echo ""
-          echo "  ⏳ App takes ~60s to start after EC2 boots."
-          echo "     Check logs: Actions → Deploy logs"
-          echo ""
-          echo "  💸 Remember to run Destroy workflow when done!"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          | Field       | Value |
+          |-------------|-------|
+          | Tag         | \`${{ github.event.inputs.tag }}\` |
+          | App URL     | ${APP_URL} |
+
+          > ⏳ App takes ~60s to start after EC2 boots.
+
+          > 💸 Run **Destroy AWS** workflow when you are done to avoid charges.
+          EOF
