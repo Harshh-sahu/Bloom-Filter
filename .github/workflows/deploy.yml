@@ -62,12 +62,11 @@ jobs:
             --generate-ssh-keys \
             --custom-data /tmp/cloud-init.yml
 
-      - name: Open port 8080
+      - name: Open ports (app + Prometheus + Grafana)
         run: |
-          az vm open-port \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name ${{ env.VM_NAME }} \
-            --port 8080
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 8080 --priority 1001
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 3000 --priority 1002
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 9090 --priority 1003
 
       - name: Print deployment info
         run: |
@@ -81,14 +80,18 @@ jobs:
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## ✅ Deployed to Azure
 
+          | Service    | URL |
+          |------------|-----|
+          | App        | http://${PUBLIC_IP}:8080 |
+          | Grafana    | http://${PUBLIC_IP}:3000 |
+          | Prometheus | http://${PUBLIC_IP}:9090 |
+
           | Field          | Value |
           |----------------|-------|
           | Git tag        | \`${{ github.ref_name }}\` |
           | Deployed by    | \`${{ github.actor }}\` |
-          | App URL        | http://${PUBLIC_IP}:8080 |
           | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
-          | VM size        | Standard_B2s (2 vCPU / 4 GB) |
 
-          > ⏳ App takes ~90s to start (VM boot + Docker + container pull).
+          > ⏳ App takes ~90s to start. Grafana import dashboard ID **4701** with Prometheus datasource.
           > 💸 Run **Destroy Azure** workflow when done — deletes everything.
           EOF
