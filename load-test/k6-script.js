@@ -161,7 +161,7 @@ Error rate: ${((data.metrics["error_rate"]?.values?.rate ?? 0) * 100).toFixed(2)
 
   return {
     "stdout": table,
-    "results.json": JSON.stringify(data, null, 2),
+    "load-test/results.json": JSON.stringify(data, null, 2),
   };
 }
 
