@@ -42,7 +42,7 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -70,8 +70,8 @@ jobs:
 
       - name: Run k6 load test
         env:
-          K6_VUS: ${{ github.event.inputs.vus || '100' }}
-          K6_DURATION: ${{ github.event.inputs.duration || '30s' }}
+          LOAD_VUS: ${{ github.event.inputs.vus || '100' }}
+          LOAD_DURATION: ${{ github.event.inputs.duration || '30s' }}
         run: k6 run load-test/k6-script.js
 
       - name: Upload results

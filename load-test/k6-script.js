@@ -21,9 +21,9 @@ import { check, sleep, group } from "k6";
 import { Counter, Rate, Trend } from "k6/metrics";
 
 // ─── Config (must be before options) ─────────────────────────────────────────
-const BASE_URL = __ENV.BASE_URL    || "http://localhost:8080";
-const VUS      = parseInt(__ENV.K6_VUS      || "100");
-const DURATION = __ENV.K6_DURATION          || "30s";
+const BASE_URL = __ENV.BASE_URL     || "http://localhost:8080";
+const VUS      = parseInt(__ENV.LOAD_VUS    || "100");
+const DURATION = __ENV.LOAD_DURATION        || "30s";
 
 // ─── Custom Metrics ──────────────────────────────────────────────────────────
 const bloomNegativeLatency = new Trend("bloom_negative_latency_ms");
