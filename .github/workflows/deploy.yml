@@ -45,35 +45,47 @@ jobs:
             echo "  - cd /app && IMAGE_TAG=${IMAGE_TAG} docker compose up -d"
           } > /tmp/cloud-init.yml
 
-      - name: Delete existing deployment if running
+      - name: First deploy or in-place update
         run: |
-          if [ "$(az group exists --name ${{ env.RESOURCE_GROUP }})" = "true" ]; then
-            echo "Existing deployment found — deleting before redeploy..."
-            az group delete --name ${{ env.RESOURCE_GROUP }} --yes
+          VM_EXISTS=$(az group exists --name ${{ env.RESOURCE_GROUP }})
+
+          if [ "$VM_EXISTS" = "true" ]; then
+            echo "VM already running — doing in-place update..."
+
+            az vm run-command invoke \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --name ${{ env.VM_NAME }} \
+              --command-id RunShellScript \
+              --scripts "
+                cd /app
+                IMAGE_TAG=${{ github.ref_name }} docker compose pull app
+                IMAGE_TAG=${{ github.ref_name }} docker compose up -d app
+                echo 'Update complete: '${{ github.ref_name }}
+              "
+
+            echo "IN_PLACE=true" >> $GITHUB_ENV
+          else
+            echo "No existing deployment — creating fresh VM..."
+
+            az group create \
+              --name ${{ env.RESOURCE_GROUP }} \
+              --location ${{ env.LOCATION }}
+
+            az vm create \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --name ${{ env.VM_NAME }} \
+              --image Ubuntu2204 \
+              --size Standard_B2s \
+              --admin-username azureuser \
+              --generate-ssh-keys \
+              --custom-data /tmp/cloud-init.yml
+
+            az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 8080 --priority 1001
+            az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 3000 --priority 1002
+            az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 9090 --priority 1003
+
+            echo "IN_PLACE=false" >> $GITHUB_ENV
           fi
-
-      - name: Create resource group
-        run: |
-          az group create \
-            --name ${{ env.RESOURCE_GROUP }} \
-            --location ${{ env.LOCATION }}
-
-      - name: Create VM
-        run: |
-          az vm create \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name ${{ env.VM_NAME }} \
-            --image Ubuntu2204 \
-            --size Standard_B2s \
-            --admin-username azureuser \
-            --generate-ssh-keys \
-            --custom-data /tmp/cloud-init.yml
-
-      - name: Open ports (app + Prometheus + Grafana)
-        run: |
-          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 8080 --priority 1001
-          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 3000 --priority 1002
-          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 9090 --priority 1003
 
       - name: Print deployment info
         run: |
@@ -83,6 +95,8 @@ jobs:
             --show-details \
             --query publicIps \
             --output tsv)
+
+          MODE=$([[ "$IN_PLACE" == "true" ]] && echo "🔄 In-place update (~30s)" || echo "🆕 Fresh VM (~90s)")
 
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## ✅ Deployed to Azure
@@ -97,8 +111,8 @@ jobs:
           |----------------|-------|
           | Git tag        | \`${{ github.ref_name }}\` |
           | Deployed by    | \`${{ github.actor }}\` |
+          | Deploy mode    | ${MODE} |
           | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
 
-          > ⏳ App takes ~90s to start. Grafana import dashboard ID **4701** with Prometheus datasource.
           > 💸 Run **Destroy Azure** workflow when done — deletes everything.
           EOF
