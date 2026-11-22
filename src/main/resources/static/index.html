@@ -171,6 +171,17 @@ header {
   0%,100% { box-shadow: 0 0 6px var(--grn) }
   50% { box-shadow: 0 0 14px var(--grn), 0 0 24px rgba(52,211,153,.4) }
 }
+.tool-link {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 600;
+  color: var(--tm); text-decoration: none;
+  background: var(--s2); border: 1px solid var(--b1);
+  border-radius: 8px; padding: 5px 11px;
+  transition: all .2s; white-space: nowrap;
+}
+.tool-link:hover { color: var(--cyan); border-color: var(--b2); box-shadow: 0 0 12px var(--cg); transform: translateY(-1px) }
+@media (max-width: 600px) { .tool-link { display: none } }
+
 .theme-btn {
   width: 40px; height: 40px;
   background: var(--s2); border: 1px solid var(--b1);
@@ -568,6 +579,12 @@ input[type="range"] {
       <div class="sdot" id="statusDot"></div>
       <span id="statusText">Connecting…</span>
     </div>
+    <a class="tool-link" id="linkGrafana" href="#" target="_blank" title="Open Grafana">
+      <span>📊</span> Grafana
+    </a>
+    <a class="tool-link" id="linkPrometheus" href="#" target="_blank" title="Open Prometheus">
+      <span>🔥</span> Prometheus
+    </a>
     <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle dark/light mode" aria-label="Toggle theme">🌙</button>
   </div>
 </header>
@@ -1025,6 +1042,13 @@ document.querySelectorAll('.btn').forEach(btn => {
     r.addEventListener('animationend', () => r.remove());
   });
 });
+
+/* ── Tool links (Grafana + Prometheus) ── */
+(function() {
+  const host = window.location.hostname || 'localhost';
+  document.getElementById('linkGrafana').href    = `http://${host}:3000`;
+  document.getElementById('linkPrometheus').href = `http://${host}:9090`;
+})();
 
 /* ── Init ── */
 checkHealth(); loadMetrics();
