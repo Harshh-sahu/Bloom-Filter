@@ -45,6 +45,13 @@ jobs:
             echo "  - cd /app && IMAGE_TAG=${IMAGE_TAG} docker compose up -d"
           } > /tmp/cloud-init.yml
 
+      - name: Delete existing deployment if running
+        run: |
+          if [ "$(az group exists --name ${{ env.RESOURCE_GROUP }})" = "true" ]; then
+            echo "Existing deployment found — deleting before redeploy..."
+            az group delete --name ${{ env.RESOURCE_GROUP }} --yes
+          fi
+
       - name: Create resource group
         run: |
           az group create \
