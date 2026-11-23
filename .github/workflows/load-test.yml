@@ -40,7 +40,7 @@ jobs:
         run: mvn package -DskipTests -q
 
       - name: Cache JAR for load test job
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: target/*.jar
           key: jar-${{ github.sha }}
@@ -84,7 +84,7 @@ jobs:
           cache: maven
 
       - name: Restore JAR
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: target/*.jar
           key: jar-${{ github.sha }}
