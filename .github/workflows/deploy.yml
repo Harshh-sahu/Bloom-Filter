@@ -8,6 +8,11 @@ name: Deploy to Azure
 
 on:
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy (e.g. develop-7d5ba07). Leave blank for latest.'
+        required: false
+        default: 'latest'
 
 env:
   RESOURCE_GROUP: bloom-filter-rg
@@ -68,8 +73,8 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
           GHCR_USER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
-          IMAGE_TAG="${{ github.ref_name }}"
-          RAW="https://raw.githubusercontent.com/${GHCR_USER}/Bloom-Filter/${IMAGE_TAG}"
+          IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
+          RAW="https://raw.githubusercontent.com/${GHCR_USER}/Bloom-Filter/${{ github.ref_name }}"
           {
             echo "#cloud-config"
             echo "runcmd:"
@@ -106,15 +111,23 @@ jobs:
       - name: In-place rolling update
         if: steps.mode.outputs.mode == 'update'
         run: |
+          GHCR_USER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          RAW="https://raw.githubusercontent.com/${GHCR_USER}/Bloom-Filter/${{ github.ref_name }}"
+          IMAGE_TAG="${{ github.event.inputs.image_tag || 'latest' }}"
           az vm run-command invoke \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --name ${{ env.VM_NAME }} \
             --command-id RunShellScript \
             --scripts "
+              mkdir -p /app/grafana/provisioning/datasources /app/grafana/provisioning/dashboards
+              curl -fsSL ${RAW}/docker-compose.prod.yml -o /app/docker-compose.yml
+              curl -fsSL ${RAW}/prometheus.prod.yml -o /app/prometheus.prod.yml
+              curl -fsSL ${RAW}/grafana/provisioning/datasources/datasources.yml -o /app/grafana/provisioning/datasources/datasources.yml
+              curl -fsSL ${RAW}/grafana/provisioning/dashboards/dashboards.yml -o /app/grafana/provisioning/dashboards/dashboards.yml
               cd /app
-              IMAGE_TAG=${{ github.ref_name }} docker compose pull app
-              IMAGE_TAG=${{ github.ref_name }} docker compose up -d app
-              echo 'Update complete: ${{ github.ref_name }}'
+              IMAGE_TAG=${IMAGE_TAG} docker compose pull
+              IMAGE_TAG=${IMAGE_TAG} docker compose up -d
+              echo 'Update complete: ${IMAGE_TAG}'
             "
 
       - name: Get public IP
