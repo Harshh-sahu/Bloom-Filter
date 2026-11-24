@@ -69,6 +69,7 @@ jobs:
         run: |
           GHCR_USER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
           IMAGE_TAG="${{ github.ref_name }}"
+          RAW="https://raw.githubusercontent.com/${GHCR_USER}/Bloom-Filter/${IMAGE_TAG}"
           {
             echo "#cloud-config"
             echo "runcmd:"
@@ -78,8 +79,11 @@ jobs:
             echo "  - chmod +x /usr/local/lib/docker/cli-plugins/docker-compose"
             echo "  - systemctl start docker && systemctl enable docker"
             echo "  - echo '${GHCR_TOKEN}' | docker login ghcr.io -u ${GHCR_USER} --password-stdin"
-            echo "  - mkdir -p /app"
-            echo "  - curl -fsSL https://raw.githubusercontent.com/${GHCR_USER}/Bloom-Filter/${IMAGE_TAG}/docker-compose.prod.yml -o /app/docker-compose.yml"
+            echo "  - mkdir -p /app/grafana/provisioning/datasources /app/grafana/provisioning/dashboards"
+            echo "  - curl -fsSL ${RAW}/docker-compose.prod.yml -o /app/docker-compose.yml"
+            echo "  - curl -fsSL ${RAW}/prometheus.prod.yml -o /app/prometheus.prod.yml"
+            echo "  - curl -fsSL ${RAW}/grafana/provisioning/datasources/datasources.yml -o /app/grafana/provisioning/datasources/datasources.yml"
+            echo "  - curl -fsSL ${RAW}/grafana/provisioning/dashboards/dashboards.yml -o /app/grafana/provisioning/dashboards/dashboards.yml"
             echo "  - cd /app && IMAGE_TAG=${IMAGE_TAG} docker compose up -d"
           } > /tmp/cloud-init.yml
 

@@ -1,18 +1,18 @@
 apiVersion: 1
 
 datasources:
-  # k6 load test metrics
-  - name: InfluxDB-k6
-    type: influxdb
-    access: proxy
-    url: http://influxdb:8086
-    database: k6
-    isDefault: true
-    editable: true
-
   # Spring Boot app metrics
   - name: Prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
+    isDefault: true
+    editable: true
+
+  # k6 load test metrics (only available when running docker-compose.yml locally)
+  - name: InfluxDB-k6
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    database: k6
     editable: true
