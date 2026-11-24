@@ -822,9 +822,9 @@ addEventListener('resize', _initCanvas);
 _initCanvas();
 
 /* ── Backend base URL ── */
-const BASE = location.protocol === 'file:'
-  ? 'http://localhost:8080'
-  : location.origin.includes('8080') ? '' : 'http://localhost:8080';
+// file:// → needs explicit host (dev without server)
+// http/https → always use relative URLs; works on :8080 direct and via nginx on :80
+const BASE = location.protocol === 'file:' ? 'http://localhost:8080' : '';
 
 if (location.protocol === 'file:')
   document.body.insertAdjacentHTML('afterbegin',

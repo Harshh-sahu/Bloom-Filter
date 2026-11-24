@@ -18,6 +18,7 @@ env:
   RESOURCE_GROUP: bloom-filter-rg
   VM_NAME:        bloom-filter-vm
   LOCATION:       eastus
+  DNS_LABEL:      bloom-filter-app   # must be unique within the region
 
 jobs:
 
@@ -87,6 +88,7 @@ jobs:
             echo "  - mkdir -p /app/grafana/provisioning/datasources /app/grafana/provisioning/dashboards"
             echo "  - curl -fsSL ${RAW}/docker-compose.prod.yml -o /app/docker-compose.yml"
             echo "  - curl -fsSL ${RAW}/prometheus.prod.yml -o /app/prometheus.prod.yml"
+            echo "  - curl -fsSL ${RAW}/nginx.conf -o /app/nginx.conf"
             echo "  - curl -fsSL ${RAW}/grafana/provisioning/datasources/datasources.yml -o /app/grafana/provisioning/datasources/datasources.yml"
             echo "  - curl -fsSL ${RAW}/grafana/provisioning/dashboards/dashboards.yml -o /app/grafana/provisioning/dashboards/dashboards.yml"
             echo "  - cd /app && IMAGE_TAG=${IMAGE_TAG} docker compose up -d"
@@ -103,7 +105,9 @@ jobs:
             --size Standard_B2s \
             --admin-username azureuser \
             --generate-ssh-keys \
-            --custom-data /tmp/cloud-init.yml
+            --custom-data /tmp/cloud-init.yml \
+            --public-ip-address-dns-name ${{ env.DNS_LABEL }}
+          az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 80   --priority 1000
           az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 8080 --priority 1001
           az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 3000 --priority 1002
           az vm open-port --resource-group ${{ env.RESOURCE_GROUP }} --name ${{ env.VM_NAME }} --port 9090 --priority 1003
@@ -122,6 +126,7 @@ jobs:
               mkdir -p /app/grafana/provisioning/datasources /app/grafana/provisioning/dashboards
               curl -fsSL ${RAW}/docker-compose.prod.yml -o /app/docker-compose.yml
               curl -fsSL ${RAW}/prometheus.prod.yml -o /app/prometheus.prod.yml
+              curl -fsSL ${RAW}/nginx.conf -o /app/nginx.conf
               curl -fsSL ${RAW}/grafana/provisioning/datasources/datasources.yml -o /app/grafana/provisioning/datasources/datasources.yml
               curl -fsSL ${RAW}/grafana/provisioning/dashboards/dashboards.yml -o /app/grafana/provisioning/dashboards/dashboards.yml
               cd /app
@@ -129,6 +134,17 @@ jobs:
               IMAGE_TAG=${IMAGE_TAG} docker compose up -d
               echo 'Update complete: ${IMAGE_TAG}'
             "
+
+      - name: Set DNS label on public IP
+        run: |
+          PIP=$(az network public-ip list \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "[0].name" --output tsv)
+          az network public-ip update \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --name "$PIP" \
+            --dns-name "${{ env.DNS_LABEL }}" || true
+          echo "FQDN: ${{ env.DNS_LABEL }}.${{ env.LOCATION }}.cloudapp.azure.com"
 
       - name: Get public IP
         id: get_ip
@@ -150,12 +166,21 @@ jobs:
       - name: Deployment summary
         run: |
           IP="${{ needs.deploy.outputs.public_ip }}"
+          FQDN="${{ env.DNS_LABEL }}.${{ env.LOCATION }}.cloudapp.azure.com"
           MODE="${{ needs.deploy.outputs.deploy_mode }}"
-          LABEL=$( [ "$MODE" = "update" ] && echo "🔄 In-place update (~30s)" || echo "🆕 Fresh VM (~90s)" )
+          LABEL=$( [ "$MODE" = "update" ] && echo "🔄 In-place update (~30s)" || echo "🆕 Fresh VM (~10 min)" )
 
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## ✅ Deployed to Azure
 
+          ### 🌐 Clean URLs (via nginx on port 80)
+          | Service    | URL |
+          |------------|-----|
+          | App        | http://${FQDN} |
+          | Grafana    | http://${FQDN}/grafana/ |
+          | Prometheus | http://${FQDN}/prometheus/ |
+
+          ### 🔌 Direct port access (fallback)
           | Service    | URL |
           |------------|-----|
           | App        | http://${IP}:8080 |
@@ -164,7 +189,7 @@ jobs:
 
           | Field          | Value |
           |----------------|-------|
-          | Git tag        | \`${{ github.ref_name }}\` |
+          | Image tag      | \`${{ github.event.inputs.image_tag || 'latest' }}\` |
           | Deployed by    | \`${{ github.actor }}\` |
           | Deploy mode    | ${LABEL} |
           | Resource group | \`${{ env.RESOURCE_GROUP }}\` |
